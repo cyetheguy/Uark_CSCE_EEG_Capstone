@@ -1,9 +1,9 @@
 # Uark_CSCE_EEG_Capstone
 
 
-This is the README for every program that makes up the  **Wireless EEG Device**<br>
+This is the README for every program that makes up the CSCE Team's contribution to the **Wireless EEG Device Project**<br>
 This project was designed and developed by Team 17.<br>
-The project was created during Jim Strother's _CSCE 35103 Software Engineering Spring 2025_ class.
+The project was created during _CSCE 49603 Capstone II Spring 2026_ class.
 <br><br>
 Table of Contents:<br>
 &emsp;* [Installation & Updating](#installation-and-updating)<br>
