@@ -87,7 +87,7 @@ In a terminal. When prompted, make sure to enter the same equipment ID on the Pl
 
 
 # Contibutors
-This project was designed and developed by Team 004, codenamed Tag SUWY. The following are the names and accounts of each member:<br>
+This project was designed and developed by Team 17. The following are the names and accounts of each member:<br>
 <br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
 <br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
 <br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
