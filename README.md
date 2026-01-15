@@ -91,6 +91,6 @@ This project was designed and developed by Team 17. The following are the names 
 <br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
 <br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
 <br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
-<br>&emsp;&emsp;Dylan Wilkins:&emsp;&ensp;&ensp;[@DJW032](https://github.com/DJW032)
+<br>&emsp;&emsp;Dylan Wilkins:&emsp;&emsp;&ensp;&ensp;[@DJW032](https://github.com/DJW032)
 
 <br><br>(Edit) To see the full graph of contribution, visit <a href="https://github.com/nhsmith4/Laser-Tag/graphs/contributors">here</a>.
