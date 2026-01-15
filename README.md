@@ -88,8 +88,9 @@ In a terminal. When prompted, make sure to enter the same equipment ID on the Pl
 
 # Contibutors
 This project was designed and developed by Team 004, codenamed Tag SUWY. The following are the names and accounts of each member:<br>
-<br>&emsp;&emsp;Nicholas Smith:&emsp;&emsp;[@nhsmith4](https://github.com/nhsmith4)
 <br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
 <br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
 <br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
-<br><br>To see the full graph of contribution, visit <a href="https://github.com/nhsmith4/Laser-Tag/graphs/contributors">here</a>.
+(Add the Others)
+
+<br><br>(Edit) To see the full graph of contribution, visit <a href="https://github.com/nhsmith4/Laser-Tag/graphs/contributors">here</a>.
