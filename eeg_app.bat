@@ -5,9 +5,28 @@ for %%a in (%*) do (
         echo update
     )
     if "%%a"=="--install" (
-        echo installing packages
+        echo installing
+
+		:: Python install
+		winget install 9NQ7512CXL7T
+		py install 3.14
+		py -m ensurepip --upgrade
+		py -m pip install --upgrade pip
+
+		:: pip libraries
+		py -m pip install pycryptodome
+
+
+		:: React install
+		npm install vite @vitejs/plugin-react
+		npm audit fix
+
+		exit
     )
 )
 
 :: Echo the final starting message with all original arguments
-python3.12 .\backend\main.py %*
+
+start "EEG App" cmd /k py .\backend\main.py %*
+cd .\frontend
+npm run dev
