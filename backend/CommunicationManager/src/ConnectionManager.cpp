@@ -16,340 +16,540 @@ TODO:
 -Add ability to sort through cycle and remove from seenDevices to manage it
 */
 
-using namespace std;
-using namespace winrt;
-using namespace Windows::Storage::Streams;
-using namespace Windows::Devices::Bluetooth;
-using namespace Windows::Devices::Bluetooth::Advertisement;
-using namespace Windows::Devices::Bluetooth::GenericAttributeProfile;
+//Bluetooth naming
+using winrt::Windows::Devices::Bluetooth::BluetoothConnectionStatus;
+using winrt::Windows::Devices::Bluetooth::BluetoothLEDevice;
+
+using winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisement;
+using winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs;
+using winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher;
+using winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcherStoppedEventArgs;
+
+//MIGHT NOT NEED THIS
+using winrt::Windows::Devices::Bluetooth::BluetoothCacheMode;
+
+//Gatt interface naming
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattSession;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattReadResult;
+
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicProperties;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicsResult;
+
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCommunicationStatus;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattClientCharacteristicConfigurationDescriptorValue;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattValueChangedEventArgs;
+
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceService;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceServicesResult;
+
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattWriteOption;
+
+//Async
+using winrt::Windows::Foundation::IAsyncOperation;
+using winrt::Windows::Foundation::AsyncStatus;
+
+//Helpers
+using winrt::Windows::Storage::Streams::DataWriter;
+using winrt::Windows::Storage::Streams::IBuffer;
+using winrt::Windows::Foundation::Collections::IVectorView;
+
+using std::hex;
+using std::dec;
+using std::cout;
+using std::endl;
+using std::string;
+using std::vector;
+using std::make_shared;
+using winrt::to_string;
 
 //-------------------------------------------------------------------------------------------------------------
-//Public
+//Constructors
 
 ConnectionManager::ConnectionManager(){
     cout << "Creating connection manager" << endl;
+    watcher.Received([this](BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs args){
+        this->didDiscoverDevice(watcher, args);
+    });
+    watcher.Stopped([this](BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementWatcherStoppedEventArgs args){
+        this->didCancelScanning();
+    });
 };
 //Implement later to handle properly
 ConnectionManager::~ConnectionManager(){
     cout << "Connection manager deconstructor called [NEEDS TO BE IMPLEMENTED]" << endl;
 };
 
-string ConnectionManager::operator<<(const ConnectionManager& CM){
-    cout << "Called connection manager to string [NEEDS TO BE IMPLEMENTED]" << endl;
-    return " ";
+//-----------------------------------------------------------------------------------------------------
+//Public
+
+void ConnectionManager::scan(){
+    watcher.Start();
 };
 
-//-------------------------------------------------------------------------------------------------------------
-//Active connection management
-
-/*-------------------------------------------------------------------------------------------------------------
-
-
--------------------------------------------------------------------------------------------------------------*/
-
-void ConnectionManager::advertise(){
-    init_apartment();
-
-    //Create GATT
-    auto result = GattServiceProvider::CreateAsync(SERVICE_UUID).get();
-
-    if(result.Error() != BluetoothError::Success){
-        cout << "Error setting up profile for BLE" << endl;
-    }else{
-        cout << "Success BLE GATT provider created successfully" << endl;
-        wcout << L"Service Provider ID: " << to_hstring(result.ServiceProvider().Service().Uuid()) << endl;
-    }
-
-    ServerSide = true;
-    static GattServiceProvider provider = result.ServiceProvider(); //For advertising persitently accross function calls and scopes
-
-    //Writing characteristics for sending messages Client -> Server
-    GattLocalCharacteristicParameters writeParams{};
-    writeParams.CharacteristicProperties(GattCharacteristicProperties::Write |
-        GattCharacteristicProperties::WriteWithoutResponse
-    );
-    
-    //CHANGE THIS TO HAVE PROTECTED COMMUNICATION LATER
-    writeParams.WriteProtectionLevel(
-        GattProtectionLevel::Plain
-    );
-    writeParams.UserDescription(L"Client -> Server");
-
-    auto writeResult = provider.Service().CreateCharacteristicAsync(CLIENT_TO_SERVER_CHAR_UUID, writeParams).get();
-
-    if(writeResult.Error() != BluetoothError::Success){
-        cout << "Failed to create write characteristic for client to server messages" << endl;
-        return;
-    }
-    ServerWriteChar = writeResult.Characteristic();
-    wcout << L"Server write characteristic for client to send messages to server ID: " << to_hstring(ServerWriteChar.Uuid()) << endl;
-
-    //Creating the event handler for when client writes to server
-    ServerWriteChar.WriteRequested([](GattLocalCharacteristic const& sender, GattWriteRequestedEventArgs const& args){
-
-        auto defferal = args.GetDeferral(); //prevent event from completing before done reading
-        try{
-            auto request = args.GetRequestAsync().get();
-            DataReader reader = DataReader::FromBuffer(request.Value());
-            vector<uint8_t> buffer(reader.UnconsumedBufferLength());
-            reader.ReadBytes(buffer);
-            string msg(buffer.begin(), buffer.end());
-            cout << "Received from client: " << msg << endl;
-            try{
-                request.Respond();
-            }catch(...){
-                cout << "Tried to respond but failed" << endl;
-            }
-        }catch(const hresult_error& ex){
-            cout << "Error handling for client write: " << to_string(ex.message()) << endl;
-        }catch(...){
-            cout << "Unknown error handling write request" << endl;
-        }
-        defferal.Complete();
-
-    });
-
-    //Creating a charactersitic that notifies broadcaster when a client subscribes to it
-    GattLocalCharacteristicParameters charParams{};
-    charParams.CharacteristicProperties(GattCharacteristicProperties::Notify |
-    GattCharacteristicProperties::Read);
-    charParams.UserDescription(L"Server -> Client");
-
-    auto notifyResult = provider.Service().CreateCharacteristicAsync(NOTIFY_CHAR_UUID, charParams).get();
-
-    if(notifyResult.Error() != BluetoothError::Success){
-        cout << "Failed to create characteristic where notified of client connection in order to pause broadcasting" << endl;
-        return;
-    }
-    ServerNotifyChar = notifyResult.Characteristic();
-    wcout << L"Server notify characteristic for when a client connects and subscribes ID: " << to_hstring(ServerNotifyChar.Uuid()) << endl;
-
-    //Creating the event handler for client connect and disconnect charateristic
-    ServerNotifyChar.SubscribedClientsChanged([this](GattLocalCharacteristic const& sender, Windows::Foundation::IInspectable const&){
-        try{
-            auto count = ServerNotifyChar.SubscribedClients().Size();
-            cout << "Number of subscribed clients: " << count << endl;
-            if(count > 0){
-                cout << "Client has connected" << endl;
-            }
-        }catch(const hresult_error& ex){
-            cout << "Error in SubscribedClientsChanged: " << to_string(ex.message()) << endl;
-        }catch(...){
-            cout << "Unknown error in SubscribedClientsChanged" << endl;
-        }
-    });
-
-    GattServiceProviderAdvertisingParameters adv{};
-    adv.IsConnectable(true);
-    adv.IsDiscoverable(true);  // allows scanning
-
-    //wait a bit to start advertising
-    this_thread::sleep_for(200ms);
-
-    provider.StartAdvertising(adv);
-    cout << "Successfully started advertising" << endl;
+void ConnectionManager::stop(){
+    watcher.Stop();
 };
 
-/*-------------------------------------------------------------------------------------------------------------
+void ConnectionManager::clearDiscoveredDevices(){
+    discoveredDevices.clear();
+};
 
+void ConnectionManager::connectToDiscoveredDevice(int deviceIndex){
+    uint64_t deviceAddress = discoveredDevices[deviceIndex].BluetoothAddress();
+    cout << hex << "Connect to: " << deviceAddress << endl;
+    connectPeripheral(deviceAddress);
+};
 
--------------------------------------------------------------------------------------------------------------*/
+void ConnectionManager::connectToDeviceWithUUID(){
+    cout << "connectToDeviceWithUUID [NEEDS TO BE IMPLEMENTED]" << endl;
+};
 
-void ConnectionManager::connect(const hstring deviceID){
-    init_apartment();
+void ConnectionManager::connectToDeviceWithName(){
+    cout << "connectToDeviceWithName [NEEDS TO BE IMPLEMENTED]" << endl;
+};
 
-    //Making CONNECTION_REQ packet to send to device
-    try{
-        auto device = BluetoothLEDevice::FromIdAsync(deviceID).get();
+void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characteristics){
+    for(auto characteristic : characteristics){
+        auto properties = characteristic.CharacteristicProperties();
+        auto characteristicPtr = make_shared<GattCharacteristic>(characteristic);
 
-        //Check if device connection was successful
-        if(!device){
-            cout << "Failed to connect to device" << endl;
-            return;
-        }
-        wcout << "Connected to device: " << device.Name().c_str() << endl;
-        ServerSide = false;
+        //Handling for if its a notify characteristic from a service
+        if(static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Notify)){
 
-        //wait a bit after first connecting
-        this_thread::sleep_for(100ms);
+            notifyCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
 
-        //Check if able to get services of device
-        auto result = device.GetGattServicesAsync().get();
-        if(result.Status() != GattCommunicationStatus::Success){
-            cout << "Failed to get devices services" << endl;
-            return;
-        }
+            characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                GattClientCharacteristicConfigurationDescriptorValue::Notify
+            ).Completed([this, characteristic](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
 
-        //Search through the services in this attribute
-        for(auto const& service : result.Services()){
-            wcout << "Found service: " << winrt::to_hstring(service.Uuid()).c_str() << endl;
+                if(status == AsyncStatus::Completed){
+                    characteristic.ValueChanged([this](GattCharacteristic sender, GattValueChangedEventArgs args){
 
-            try{
-                //Get characteristics of a service
-                auto charsResult = service.GetCharacteristicsAsync().get();
-                if(charsResult.Status() == GattCommunicationStatus::Success){
+                        this->didReadValueForCharacteristic(args.CharacteristicValue(), GattCommunicationStatus::Success);
 
-                    //Search through these characteristics
-                    for(auto const& ch : charsResult.Characteristics()){
-                        wcout << "Characteristic UUID: " << winrt::to_hstring(ch.Uuid()).c_str() << endl;
-                        
-                        //Create template struct on type trait of properties
-                        auto properties = ch.CharacteristicProperties();
-                        using underlying = std::underlying_type_t<GattCharacteristicProperties>;
-
-                        //Notify characteristic send messages from server to client
-                        if((static_cast<underlying>(properties) & static_cast<underlying>(GattCharacteristicProperties::Notify)) != 0){
-                            
-                            ClientNotifyChar = ch;
-                            cout << "Notify characteristic found for sending messages" << endl;
-                            
-                            ch.ValueChanged([](GattCharacteristic const&, GattValueChangedEventArgs const& args){
-                                DataReader reader = DataReader::FromBuffer(args.CharacteristicValue());
-                                vector<uint8_t> buffer(reader.UnconsumedBufferLength());
-                                reader.ReadBytes(buffer);
-                                string msg(buffer.begin(), buffer.end());
-                                cout << "Received message: " << msg << endl;
-                            });
-
-                            //Enable the notifications
-                            auto status = ch.WriteClientCharacteristicConfigurationDescriptorAsync(
-                                GattClientCharacteristicConfigurationDescriptorValue::Notify
-                            ).get();
-
-                            if(status != GattCommunicationStatus::Success){
-                                cout << "Failed to enable notify" << endl;
-                            }
-                        }
-
-                        //Write characteristic for sending messages from client to server
-                        if((static_cast<underlying>(properties) & static_cast<underlying>(GattCharacteristicProperties::WriteWithoutResponse))!= 0){
-
-                            ClientWriteChar = ch;
-                            cout << "Write characteristic found for sending messages" << endl;
-
-                        }
-                    }
-
-                }else{
-                    cout << "Error getting characteristics" << endl;
+                    });
                 }
-            }catch(const hresult_error& ex){
-                cout << "Error acquiring a characteristic may require authentication and encryption" << endl;
-            }
+
+            });
+
         }
 
-    }catch(const hresult_error& ex){
-        cout << "Failed to connect to device (exception): " << to_string(ex.message()) << endl;
+        //Handling for if its a write characteristic from a service
+        if((static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Write)) ||
+           (static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::WriteWithoutResponse))){
+
+            writeCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
+
+        }
+
     }
 };
 
-/*-------------------------------------------------------------------------------------------------------------
+void ConnectionManager::sendMessage(uint64_t deviceAddress, const string& message){
+    auto ch = writeCharacteristics.find(deviceAddress);
+    if(ch == writeCharacteristics.end()){
+        cout << "No write characteristics have been stored for device: " << BluetoothAddressToString(deviceAddress) << endl;
+        return;
+    }
 
+    auto characteristic = ch->second; //get actual value stored at index
+    if(!characteristic){
+        cout << "Write characteristic pointer is null" << endl;
+    }
 
--------------------------------------------------------------------------------------------------------------*/
-
-void ConnectionManager::sendMessage(const string message){
     DataWriter writer;
     writer.WriteBytes(vector<uint8_t>(message.begin(), message.end()));
+    auto buffer = writer.DetachBuffer();
 
-    if(ServerSide){
-        if(!ServerNotifyChar){
-            cout << "No notify characteristic" << endl;
-            return;
-        }
-
-        if(ServerNotifyChar.SubscribedClients().Size() == 0){
-            cout << "No clients are connected" << endl;
-            return;
-        }
-
-        for(auto client : ServerNotifyChar.SubscribedClients()){
-            ServerNotifyChar.NotifyValueAsync(writer.DetachBuffer(), client);
-        }
-    }else{  
-        if(!ClientWriteChar){
-            cout << "No write characteristic" << endl;
-            return;
-        } 
-
-        //Create thread to send to avoid deadlock waiting for server to get message
-        thread([message = message, writer = writer, charToWrite = ClientWriteChar](){
-            try{
-                auto status = charToWrite.WriteValueAsync(writer.DetachBuffer()).get();
-
-                if(status == GattCommunicationStatus::Success){
-                    cout << "Sent message: " << message << endl;
+    characteristic->WriteValueAsync(buffer, GattWriteOption::WriteWithoutResponse).Completed(
+        [message](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
+    
+            if(status == AsyncStatus::Completed){
+                auto result = op.GetResults();
+                if(result == GattCommunicationStatus::Success){
+                    cout << "Message: " << message << ", was sent successfully" << endl;
                 }else{
-                    cout << "Failed to send message" << endl;
+                    cout << "Message: " << message << ", failed to send(GattCommunication)" << endl;
                 }
-            }catch(const hresult_error& ex){
-                cout << "Exception when sending message " << to_string(ex.message()) << endl;
+            }else{
+                cout << "Message: " << message << ", failed to send(AsyncStatus)" << endl;
             }
-
-        }).detach();
-
-    }
-};
-
-//-------------------------------------------------------------------------------------------------------------
-//Buffer and reconnection management
-
-/*-------------------------------------------------------------------------------------------------------------
-
-
--------------------------------------------------------------------------------------------------------------*/
-
-void ConnectionManager::listDevices(){
-
-    cout << "Scanning for devices for 3 seconds" << endl;
-
-    init_apartment();
-
-    BluetoothLEAdvertisementWatcher watcher;
-
-    watcher.Received([](BluetoothLEAdvertisementWatcher const&, BluetoothLEAdvertisementReceivedEventArgs const& args){
-        std::wstring name = args.Advertisement().LocalName().c_str();
-        if (!name.empty()) {
-            std::wcout << L"Found device: " << name << L"\nAddress: " << std::hex << args.BluetoothAddress() << std::endl;
-        }
+    
     });
 
-    watcher.ScanningMode(BluetoothLEScanningMode::Active);
-    watcher.Start();
+}
 
-    this_thread::sleep_for(3s);
-
-    watcher.Stop();
-
-    cout << "Done listening" << endl;
-};
-
-//-------------------------------------------------------------------------------------------------------------
-//Getters and setters
-
-//Get Bluetooth address of your device
-uint64_t ConnectionManager::getBluetoothAddress() const{
-    try{
-        init_apartment();
-
-        auto adapter = BluetoothAdapter::GetDefaultAsync().get();
-        uint64_t address = adapter.BluetoothAddress();
-
-        return address;
-    }catch(...){
-        cout << "Issue getting local device's Bluetooth address" << endl;
-        return 0;
+void ConnectionManager::getFoundDeviceList(){
+    if(discoveredDevices.empty()){
+        cout << "No devices discovered yet" << endl;
+        return;
     }
-};
-//Get name of your device
-wstring ConnectionManager::getDeviceName() const{
-    wchar_t name[MAX_COMPUTERNAME_LENGTH + 1];
-    DWORD size = MAX_COMPUTERNAME_LENGTH + 1;
 
-    if(GetComputerNameW(name, &size)){
-        return wstring(name);
+    cout << "Discovered Devices: " << endl;
+    for(size_t i = 0; i < discoveredDevices.size(); i++){
+        auto& device = discoveredDevices[i];
+        cout << i << ": " << BluetoothAddressToString(device.BluetoothAddress());
+
+        auto ad = device.Advertisement();
+
+        if(!ad.LocalName().empty()){
+            cout << "\nName: " << to_string(ad.LocalName().c_str());
+        }
+
+        cout << "\nRSSI: " << device.RawSignalStrengthInDBm() << endl;
+
+    }
+
+};
+
+void ConnectionManager::getRssiSensitivityofPeripheral(){
+    cout << "Current RSSI sensitivity threshold: " << rssiSensitivity << " dBm" << endl;
+};
+
+void ConnectionManager::setRssiSensitivity(int rssiSensitivity){
+    this->rssiSensitivity = rssiSensitivity;
+};
+
+string ConnectionManager::winrtGuidToString(winrt::guid uuid){
+    char uuidCStr[37];
+    if(uuid.Data2 == 0){
+        sprintf_s(uuidCStr, sizeof(uuidCStr), "%04x", uuid.Data1);
     }else{
-        cout << "Issue getting local device's name" << endl;
-        return L"";
+        sprintf_s(uuidCStr, sizeof(uuidCStr), "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", uuid.Data1, uuid.Data2, uuid.Data3, uuid.Data4[0], uuid.Data4[1], uuid.Data4[2], uuid.Data4[3], uuid.Data4[4], uuid.Data4[5], uuid.Data4[6], uuid.Data4[7]);
+    }
+    string guid = string(uuidCStr);
+    return guid;
+};
+
+string ConnectionManager::BluetoothAddressToString(uint64_t address){
+    char buff[18];
+    sprintf_s(buff, sizeof(buff), "%02x:%02x:%02x:%02x:%02x:%02x", static_cast<unsigned int>((address >> 40) & 0xFF), static_cast<unsigned int>((address >> 32) & 0xFF), static_cast<unsigned int>((address >> 24) & 0xFF), static_cast<unsigned int>((address >> 16) & 0xFF), static_cast<unsigned int>((address >> 8) & 0xFF), static_cast<unsigned int>(address & 0xFF));
+    return buff;
+}
+
+uint64_t ConnectionManager::stringToBluetoothAddress(const string& address){
+    string hex;
+    hex.reserve(12);
+
+    for(char c : address){
+        if(isxdigit(static_cast<unsigned char>(c))){
+            hex.push_back(c);
+        }
+    }
+
+    uint64_t addr = 0;
+    if(hex.length() != 12){
+        cout << "Invalid Bluetooth address" << endl;
+        return addr;
+    }
+
+    for(char c : hex){
+        addr <<= 4;
+        if(c >= '0' && c <= '9') addr |= (c - '0');
+        else if(c >= 'A' && c <= 'F') addr |= (c - 'A' + 10);
+        else if(c >= 'a' && c <= 'f') addr |= (c - 'a' + 10);
+    }
+
+    return addr;
+
+}
+
+//-----------------------------------------------------------------------------------------------------
+//Private
+
+void ConnectionManager::connectPeripheral(uint64_t windowsDeviceAddress){
+    BluetoothLEDevice::FromBluetoothAddressAsync(windowsDeviceAddress).Completed([this](IAsyncOperation<BluetoothLEDevice> sender, AsyncStatus status){
+        auto device = sender.GetResults();
+        if(device){
+            switch(status){
+                case AsyncStatus::Completed:
+                    this->didConnect(device);
+                    break;
+                case AsyncStatus::Canceled:
+                case AsyncStatus::Error:
+                case AsyncStatus::Started:
+                    this->didFailToConnect();
+            }
+        }else{
+            cout << "Device is Null: " << sender.ErrorCode() << endl;
+        }
+    });
+};
+
+void ConnectionManager::discoverServices(BluetoothLEDevice device){
+    device.GetGattServicesAsync().Completed([this](IAsyncOperation<GattDeviceServicesResult> sender, AsyncStatus status){
+        GattDeviceServicesResult result = sender.get();
+        if(result){
+            switch(status){
+                case AsyncStatus::Completed:
+                    this->didDiscoverServices(result.Services(), result.Status());
+                    break;
+                case AsyncStatus::Canceled:
+                case AsyncStatus::Error:
+                case AsyncStatus::Started:
+                    this->didFailToDiscoverServices();
+            }
+        }else{
+            cout << "Services are empty" << endl;
+        }
+    });
+};
+
+void ConnectionManager::discoverCharacteristicsForService(GattDeviceService service){
+    service.GetCharacteristicsAsync().Completed([this](IAsyncOperation<GattCharacteristicsResult> sender, AsyncStatus status){
+
+        GattCharacteristicsResult result = sender.get();
+        if(result){
+            switch(status){
+                case AsyncStatus::Completed:
+                    this->didDiscoverCharacteristicsForService(result.Characteristics(), result.Status());
+                    break;
+                case AsyncStatus::Canceled:
+                case AsyncStatus::Error:
+                case AsyncStatus::Started:
+                    this->didFailToDiscoverCharacteristicsForService();
+            }
+        }else{
+            cout << "Characteristics are empty" << endl;
+        }
+
+    });
+};
+
+void ConnectionManager::readValueForCharacteristic(GattCharacteristic characteristic){
+    characteristic.ReadValueAsync().Completed([this](IAsyncOperation<GattReadResult> sender, AsyncStatus status){
+        GattReadResult result = sender.get();
+        if(result){
+            switch(status){
+                case AsyncStatus::Completed:
+                    this->didReadValueForCharacteristic(result.Value(), result.Status());
+                    break;
+                case AsyncStatus::Canceled:
+                case AsyncStatus::Error:
+                case AsyncStatus::Started:
+                    this->didFailToReadValueForCharacteristic();
+            }
+        }else{
+            cout << "Value is empty" << endl;
+        }
+    });
+};
+
+void ConnectionManager::didDiscoverDevice(BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs args){
+    if(isPheripheralNew(args)){
+        discoveredDeviceUUIDS.push_back(args.BluetoothAddress());
+        discoveredDevices.push_back(args);
+
+        if(shouldReport){
+            cout << "Device Address: " << this->BluetoothAddressToString(args.BluetoothAddress()) << endl;
+            printDeviceDescription(args);
+        }
+
+        if(this->shouldConnectToDevice(args)){
+            cout << "Device found that meets connection criteria" << endl;
+            connectToDiscoveredDevice(discoveredDevices.size()-1);
+        }else{
+            cout << "Device ignored (filter rules)" << endl;
+            cout << "-----------------------------------------" << endl;
+        }
+
     }
 };
+
+void ConnectionManager::didCancelScanning(){
+    cout << "stopped scanning" << endl;
+};
+
+void ConnectionManager::didConnect(BluetoothLEDevice& device){
+    cout << "didConnectPeripheral: " << to_string(device.Name().c_str()) << endl;
+    discoverServices(device);
+};
+
+void ConnectionManager::didDisconnect(){
+    cout << "Device Disconnected" << endl;
+};
+
+void ConnectionManager::didFailToConnect(){
+    cout << "didFailToConnect [NEEDS TO BE IMPLEMENTED]" << endl;
+};
+
+void ConnectionManager::didFailToDiscoverServices(){
+    cout << "Failed to discover services of a device" << endl;
+    didDisconnect();
+};
+
+void ConnectionManager::didFailToDiscoverCharacteristicsForService(){
+    cout << "Failed to discover a characteristic for a service" << endl;
+};
+
+void ConnectionManager::didFailToReadValueForCharacteristic(){
+    cout << "Failed to read a characteristic that was discovered" << endl;
+};
+
+void ConnectionManager::didDiscoverIncludedServicesforService(){
+    cout << "didDiscoverIncludedServicesforService [NEEDS TO BE IMPLEMENTED]" << endl;
+};
+
+void ConnectionManager::didDiscoverServices(IVectorView<GattDeviceService> services, GattCommunicationStatus status){
+    if(status == GattCommunicationStatus::Success){
+        cout << "didDiscoverServices: " << to_string(services.GetAt(0).Device().Name().c_str()) << endl;
+        for(auto service : services){
+            cout << "Service: " << this->winrtGuidToString(service.Uuid()) << endl;
+            discoverCharacteristicsForService(service);
+        }
+    }else{
+        cout << "Error getting services: ";
+        switch(status){
+            case GattCommunicationStatus::Unreachable:
+                cout << "Unreachable";
+                break;
+            case GattCommunicationStatus::ProtocolError:
+                cout << "ProtocolError";
+                break;
+            case GattCommunicationStatus::AccessDenied:
+                cout << "AccessDenied";
+                break;
+
+        }
+        cout << endl;
+    }
+};
+
+void ConnectionManager::didDiscoverCharacteristicsForService(IVectorView<GattCharacteristic> characteristics, GattCommunicationStatus status){
+    if(status == GattCommunicationStatus::Success){
+        cout << "didDiscoverCharacteristicsForService: " << this->winrtGuidToString(characteristics.GetAt(0).Service().Uuid()) << endl;
+        for(auto characteristic : characteristics){
+            cout << "Characteristic: " << this->winrtGuidToString(characteristic.Uuid()) << " : " << to_string(characteristic.UserDescription().c_str()) << endl;
+            readValueForCharacteristic(characteristic);
+
+            subscribeToChar(characteristics);
+
+        }
+    }else{
+        cout << "Error getting characteristics" << endl;
+        switch(status){
+            case GattCommunicationStatus::Unreachable:
+                cout << "Unreachable";
+                break;
+            case GattCommunicationStatus::ProtocolError:
+                cout << "ProtocolError";
+                break;
+            case GattCommunicationStatus::AccessDenied:
+                cout << "AccessDenied";
+                break;
+        }
+        cout << endl;
+    }
+};
+
+void ConnectionManager::didReadValueForCharacteristic(IBuffer value, GattCommunicationStatus status){
+    if(status == GattCommunicationStatus::Success){
+        cout << "Value: ";
+        for(size_t i = 0; i < value.Length(); i++){
+            printf("%02x", value.data()[i]);
+        }
+        cout << endl;
+
+        if(isDesiredDevice(value)){
+            cout << "Device connection was accepted" << endl;
+        }else{
+            cout << "Wrong device, disconnecting" << endl;
+            didDisconnect();
+        }
+
+    }else{
+        cout << "Error Value For Characteristic: ";
+        switch(status){
+            case GattCommunicationStatus::Unreachable:
+                cout << "Unreachable";
+                break;
+            case GattCommunicationStatus::ProtocolError:
+                cout << "ProtocolError";
+                break;
+            case GattCommunicationStatus::AccessDenied:
+                cout << "AccessDenied";
+                break;
+        }
+        cout << endl;
+    }
+};
+
+void ConnectionManager::printCharacteristicDescription(const GattCharacteristic& characteristic){
+    cout << "Characteristic UUID: " << winrtGuidToString(characteristic.Uuid());
+    auto desc = characteristic.UserDescription();
+    if(!desc.empty()){
+        cout << " : " << to_string(desc);
+    }
+
+    auto properties = static_cast<uint32_t>(characteristic.CharacteristicProperties());
+    cout << "Properties: "
+         << ((properties & static_cast<uint32_t>(GattCharacteristicProperties::Read)) ? "Read " : "")
+         << ((properties & static_cast<uint32_t>(GattCharacteristicProperties::Write)) ? "Write " : "")
+         << ((properties & static_cast<uint32_t>(GattCharacteristicProperties::Notify)) ? "Notify " : "")
+         << endl;
+
+};
+
+void ConnectionManager::printDeviceDescription(const BluetoothLEAdvertisementReceivedEventArgs& device){
+    BluetoothLEAdvertisement deviceAd = device.Advertisement();
+    cout << "Device name: " << to_string(deviceAd.LocalName().c_str()) << endl;
+
+    for(auto service : deviceAd.ServiceUuids()){
+        cout << "UUID: " << this->winrtGuidToString(service) << endl;
+    }
+
+    for(auto manuData : deviceAd.ManufacturerData()){
+        cout << hex << "Manu: ";
+        printf("%04x : ", manuData.CompanyId());
+
+        for(size_t i = 0; i < manuData.Data().Length(); i++){
+            printf("%02x", manuData.Data().data()[i]);
+        }
+        cout << endl;
+    }
+    cout << dec << "RSSI: " << device.RawSignalStrengthInDBm() << endl;
+    cout << "-----------------------------------------" << endl;
+
+
+};
+
+bool ConnectionManager::isPheripheralNew(const BluetoothLEAdvertisementReceivedEventArgs& args){
+    //Search already discovered devices
+    return (discoveredDeviceUUIDS.empty() || !(std::find(discoveredDeviceUUIDS.begin(), discoveredDeviceUUIDS.end(), args.BluetoothAddress()) != discoveredDeviceUUIDS.end()));
+};
+
+bool ConnectionManager::shouldConnectToDevice(const BluetoothLEAdvertisementReceivedEventArgs& args){
+
+    //Only connect to reliable signals
+    if(args.RawSignalStrengthInDBm() < -75){
+        return false;
+    }
+
+    //Ignore Apple devices Macs/Airtags/IPhones/IPads/Watches/etc
+    for(auto const& mfg : args.Advertisement().ManufacturerData()){
+        if(mfg.CompanyId() == 0x004C){
+            return false;
+        }
+    }
+
+    //Only connect if they have a service
+    if(args.Advertisement().ServiceUuids().Size() == 0){
+        return false;
+    }
+
+    return true;
+
+}
+
+bool ConnectionManager::isDesiredDevice(const IBuffer& value){
+    auto data = value.data();
+    size_t len = value.Length();
+
+    //Need to assign characteristic values and put them here
+    if(true){
+        return true;
+    }
+    return false;
+
+}
