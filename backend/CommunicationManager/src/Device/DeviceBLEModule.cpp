@@ -18,8 +18,10 @@ using winrt::Windows::Devices::Bluetooth::BluetoothCacheMode;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattSession;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattReadResult;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattServiceProviderAdvertisingParameters;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattServiceProvider;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattLocalCharacteristicParameters;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattWriteRequestedEventArgs;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattWriteRequest;
 
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattLocalCharacteristic;
@@ -42,6 +44,7 @@ using winrt::Windows::Foundation::AsyncStatus;
 
 //Helpers
 using winrt::Windows::Storage::Streams::DataWriter;
+using winrt::Windows::Storage::Streams::DataReader;
 using winrt::Windows::Storage::Streams::IBuffer;
 using winrt::Windows::Foundation::Collections::IVectorView;
 
@@ -70,64 +73,107 @@ void DeviceBLEModule::Start(){
     advParams.IsDiscoverable(true);
 
     provider.StartAdvertising(advParams);
+
+    cout << "Successfully started advertising" << endl;
+
 };
 
 void DeviceBLEModule::Stop(){
     provider.StopAdvertising();
+
+    cout << "Successfully stopped advertising" << endl;
+
 };
 
-void DeviceBLEModule::plainSendMessage(span<const uint8_t> data){
+void DeviceBLEModule::plainSendMessage(const string& message){
+    if(!plainMessageChar){
+        cout << "No notify/write characteristic" << endl;
+        return;
+    }
+
     DataWriter writer;
-    writer.WriteBytes(data);
-    this->plainMessageChar.NotifyValueAsync(writer.DetachBuffer());
-}
+    writer.WriteBytes(vector<uint8_t>(message.begin(), message.end()));
+    auto buffer = writer.DetachBuffer();
+
+    auto status = plainMessageChar.NotifyValueAsync(buffer).get();
+
+    for(uint32_t i = 0; i < status.Size(); i++){
+        auto result = status.GetAt(i);
+        auto clientStatus = result.Status();
+
+        if(clientStatus == GattCommunicationStatus::Success){
+            cout << "Successfully sent message to a client" << endl;
+        }else{
+            cout << "Failed to send a message to a client" << endl;
+        }
+
+    }
+
+};
 
 void DeviceBLEModule::InitializeGatt(){
 
     //Create service
     guid serviceUuid("E3F12A4B-7C9D-4D2F-AF89-5B3E6C1D2A7F");
-    auto serviceResult = provider.CreateAsync(serviceUuid.ToWinRTGuid()).get();
+    auto serviceResult = GattServiceProvider::CreateAsync(serviceUuid.ToWinRTGuid()).get();
 
     if(serviceResult.Error() != BluetoothError::Success){
-        runtime_error("Failed to create GATT servcie");
+        throw runtime_error("Failed to create GATT service");
     }
 
-    provider = serviceResult.ServiceProvider();
-    
-    //Characteristic
+    this->provider = serviceResult.ServiceProvider();
+
     GattLocalCharacteristicParameters params;
     params.CharacteristicProperties(
         GattCharacteristicProperties::Write |
         GattCharacteristicProperties::Notify
     );
     params.WriteProtectionLevel(GattProtectionLevel::Plain);
-    params.UserDescription(L"Plaintext Messanger");
+    params.UserDescription(L"Plaintext Messenger");
 
     guid charUuid("A1B2C3D4-5E6F-7890-1234-56789ABCDEF0");
+
     auto charResult = provider.Service().CreateCharacteristicAsync(charUuid.ToWinRTGuid(), params).get();
 
-    plainMessageChar = charResult.Characteristic();
+    if(charResult.Error() != BluetoothError::Success){
+        throw runtime_error("Failed to create characteristic");
+    }
 
-    plainMessageChar.WriteRequested([](auto const&, GattWriteRequestedEventArgs const& args){
+    this->plainMessageChar = charResult.Characteristic();
 
-        auto defferal = args.GetDeferral();
-        auto request = args.GetRequestAsync().get();
+    this->plainMessageChar.WriteRequested([](auto const&, GattWriteRequestedEventArgs const& args){
+        
+        auto deferral = args.GetDeferral();
 
-        auto reader = DataReader::FromBuffer(request.Value());
-        vector<uint_8> msg(reader.UncomsumedBufferLenght());
-        reader.ReadBytes(msg);
+        args.GetRequestAsync().Completed([deferral](IAsyncOperation<GattWriteRequest> op, AsyncStatus status){
 
-        printf("Received message: ");
-        for(aut b: msg){
-            printf("%02x", b)
-        }
-        printf("\n");
+            if(status == AsyncStatus::Completed){
 
-        request.Respond();
-        defferal.Complete();
+                auto request = op.GetResults();
+
+                auto reader = DataReader::FromBuffer(request.Value());
+                vector<uint8_t> msg(reader.UnconsumedBufferLength());
+                reader.ReadBytes(msg);
+
+                printf("Received: ");
+                for(auto b : msg){
+                    printf("%c", b);
+                }
+                printf("\n");
+
+                request.Respond();
+            }else{
+                printf("Failed to read write request\n");
+            }
+
+            deferral.Complete();
+
+        });
 
     });
 
-    //A1B2C3D4-5E6F-7890-1234-56789ABCDEF0
+    plainMessageChar.SubscribedClientsChanged([](auto const&, auto const&){
+        printf("Client subscription changed\n");
+    });
 
 };

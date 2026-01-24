@@ -20,6 +20,8 @@
 #include <string_view>
 #include <map>
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 
 //-------------------------------------------------------------------------------------------------------------
 
@@ -213,6 +215,7 @@ class ConnectionManager{
 
         void printCharacteristicDescription(const winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic& characteristic);
         void printDeviceDescription(const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs& device);
+        void printBufferAsString(winrt::Windows::Storage::Streams::IBuffer const& buffer);
 
         bool isPheripheralNew(const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs& args);
         bool shouldConnectToDevice(const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs& args);
@@ -240,8 +243,8 @@ class ConnectionManager{
 
         winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher;
         //Have as a map to handle multiple characteristics of same type
-        std::map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> writeCharacteristics;
-        std::map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> notifyCharacteristics;
+        std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> subscribedWriteCharacteristics;
+        std::unordered_map<uint64_t, std::unordered_set<winrt::guid>> subscribedNotifyCharacteristics;
         bool connecting = false;
    
 };

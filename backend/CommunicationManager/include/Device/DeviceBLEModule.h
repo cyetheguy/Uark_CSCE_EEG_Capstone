@@ -155,7 +155,7 @@ class DeviceBLEModule{
 
         void Start();
         void Stop();
-        void plainSendMessage(span<const uint8_t> data);
+        void plainSendMessage(const std::string& message);
 
     private:
 
