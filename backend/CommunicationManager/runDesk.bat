@@ -1,6 +1,6 @@
 @echo off
 
 ::Run main.exe
-bin\main.exe
+bin\\Desktop\main.exe
 
 pause
