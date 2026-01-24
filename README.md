@@ -15,11 +15,10 @@ Table of Contents:<br>
 ## Installation
 
 >[!TIP]
-><br>This program can be installed and immmediately run via a shell script. To utilize this feature, first download (Change past this point) [photon.sh](https://github.com/nhsmith4/Laser-Tag/blob/main/photon.sh) and execute the following commands within its directory: (You may have to edit photon.sh permissions by right clicking it, going to properties, then permissions, and click the checkmark to allow the file to run as a program)
+><br>This program can be installed and immmediately run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
 >
 >```
->chmod +x photon.sh
->./photon.sh --install
+>.\eeg_app.bat
 >```
 ><br><br>
 >This should install all libraries and packages needed to run the software, as well as download the latest version of the software and immediately execute it.<br>
