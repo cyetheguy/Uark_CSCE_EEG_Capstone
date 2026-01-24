@@ -24,6 +24,7 @@ Table of Contents:<br>
 >This should install all libraries and packages needed to run the software, as well as download the latest version of the software and immediately execute it.<br>
 >*(Note): As this program is developed, new packages may be required. It is therefore recommended that whenever your program shows a library failure that you redownload the shell script and rerun with the installation flag.*
 
+>[!TIP]
 ><br>To update any dependencies, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
 >
 >```
