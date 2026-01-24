@@ -18,11 +18,19 @@ Table of Contents:<br>
 ><br>This program can be installed and immmediately run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
 >
 >```
->.\eeg_app.bat
+>.\eeg_app.bat --install
 >```
 ><br><br>
 >This should install all libraries and packages needed to run the software, as well as download the latest version of the software and immediately execute it.<br>
 >*(Note): As this program is developed, new packages may be required. It is therefore recommended that whenever your program shows a library failure that you redownload the shell script and rerun with the installation flag.*
+
+><br>To update any dependencies, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
+>
+>```
+>.\eeg_app.bat --update
+>```
+><br><br>
+>This should update all libraries and packages needed to run the software, and immediately execute it.<br>
 
 This software is intended to be run with *Python v3.9.2* within a Debian Linux Virtual Machine.<br>
 
