@@ -126,11 +126,13 @@ void DeviceBLEModule::InitializeGatt(){
     GattLocalCharacteristicParameters params;
     params.CharacteristicProperties(
         GattCharacteristicProperties::Write |
+        GattCharacteristicProperties::WriteWithoutResponse |
         GattCharacteristicProperties::Notify
     );
     params.WriteProtectionLevel(GattProtectionLevel::Plain);
     params.UserDescription(L"Plaintext Messenger");
 
+    //Plaintext message UUID
     guid charUuid("A1B2C3D4-5E6F-7890-1234-56789ABCDEF0");
 
     auto charResult = provider.Service().CreateCharacteristicAsync(charUuid.ToWinRTGuid(), params).get();
