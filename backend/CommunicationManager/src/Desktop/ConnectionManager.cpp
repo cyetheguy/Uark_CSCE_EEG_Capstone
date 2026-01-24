@@ -51,6 +51,7 @@ using winrt::Windows::Foundation::AsyncStatus;
 
 //Helpers
 using winrt::Windows::Storage::Streams::DataWriter;
+using winrt::Windows::Storage::Streams::DataReader;
 using winrt::Windows::Storage::Streams::IBuffer;
 using winrt::Windows::Foundation::Collections::IVectorView;
 
@@ -117,21 +118,30 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
         //Handling for if its a notify characteristic from a service
         if(static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Notify)){
 
-            notifyCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
+            cout << "Found notify characteristic" << endl;
 
-            characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
-                GattClientCharacteristicConfigurationDescriptorValue::Notify
-            ).Completed([this, characteristic](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
+            auto addr = characteristic.Service().Device().BluetoothAddress();
+            auto charUuid = characteristic.Uuid();
 
-                if(status == AsyncStatus::Completed){
-                    characteristic.ValueChanged([this](GattCharacteristic sender, GattValueChangedEventArgs args){
+            if(subscribedNotifyCharacteristics[addr].find(charUuid) == subscribedNotifyCharacteristics[addr].end()){
 
-                        this->didReadValueForCharacteristic(args.CharacteristicValue(), GattCommunicationStatus::Success);
+                subscribedNotifyCharacteristics[addr].insert(charUuid);
 
-                    });
-                }
+                characteristicPtr->WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue::Notify
+                ).Completed([this, characteristicPtr](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
 
-            });
+                    if(status == AsyncStatus::Completed){
+                        characteristicPtr->ValueChanged([this](GattCharacteristic sender, GattValueChangedEventArgs args){
+
+                            this->didReadValueForCharacteristic(args.CharacteristicValue(), GattCommunicationStatus::Success);
+
+                        });
+                    }
+
+                });
+
+            }
 
         }
 
@@ -139,7 +149,9 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
         if((static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Write)) ||
            (static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::WriteWithoutResponse))){
 
-            writeCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
+            cout << "Found write characteristic" << endl;
+
+            subscribedWriteCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
 
         }
 
@@ -147,13 +159,13 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
 };
 
 void ConnectionManager::sendMessage(uint64_t deviceAddress, const string& message){
-    auto ch = writeCharacteristics.find(deviceAddress);
-    if(ch == writeCharacteristics.end()){
+    auto ch = subscribedWriteCharacteristics.find(deviceAddress);
+    if(ch == subscribedWriteCharacteristics.end()){
         cout << "No write characteristics have been stored for device: " << BluetoothAddressToString(deviceAddress) << endl;
         return;
     }
 
-    auto characteristic = ch->second; //get actual value stored at index
+    auto& characteristic = ch->second; //get actual value stored at index
     if(!characteristic){
         cout << "Write characteristic pointer is null" << endl;
     }
@@ -337,7 +349,7 @@ void ConnectionManager::readValueForCharacteristic(GattCharacteristic characteri
 };
 
 void ConnectionManager::didDiscoverDevice(BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementReceivedEventArgs args){
-    if(isPheripheralNew(args)){
+    if(isPheripheralNew(args) && !connecting){
         discoveredDeviceUUIDS.push_back(args.BluetoothAddress());
         discoveredDevices.push_back(args);
 
@@ -346,8 +358,10 @@ void ConnectionManager::didDiscoverDevice(BluetoothLEAdvertisementWatcher watche
             printDeviceDescription(args);
         }
 
-        if(this->shouldConnectToDevice(args)){
+        if(this->shouldConnectToDevice(args) && !connecting){
             cout << "Device found that meets connection criteria" << endl;
+            connecting = true;
+            watcher.Stop();
             connectToDiscoveredDevice(discoveredDevices.size()-1);
         }else{
             cout << "Device ignored (filter rules)" << endl;
@@ -362,11 +376,13 @@ void ConnectionManager::didCancelScanning(){
 };
 
 void ConnectionManager::didConnect(BluetoothLEDevice& device){
+    connecting = false;
     cout << "didConnectPeripheral: " << to_string(device.Name().c_str()) << endl;
     discoverServices(device);
 };
 
 void ConnectionManager::didDisconnect(){
+    connecting = false;
     cout << "Device Disconnected" << endl;
 };
 
@@ -422,10 +438,10 @@ void ConnectionManager::didDiscoverCharacteristicsForService(IVectorView<GattCha
         for(auto characteristic : characteristics){
             cout << "Characteristic: " << this->winrtGuidToString(characteristic.Uuid()) << " : " << to_string(characteristic.UserDescription().c_str()) << endl;
             readValueForCharacteristic(characteristic);
-
-            subscribeToChar(characteristics);
-
         }
+
+        subscribeToChar(characteristics);
+
     }else{
         cout << "Error getting characteristics" << endl;
         switch(status){
@@ -445,14 +461,16 @@ void ConnectionManager::didDiscoverCharacteristicsForService(IVectorView<GattCha
 
 void ConnectionManager::didReadValueForCharacteristic(IBuffer value, GattCommunicationStatus status){
     if(status == GattCommunicationStatus::Success){
-        cout << "Value: ";
+        cout << "Value (02x hex): ";
         for(size_t i = 0; i < value.Length(); i++){
             printf("%02x", value.data()[i]);
         }
         cout << endl;
 
+        printBufferAsString(value);
+
         if(isDesiredDevice(value)){
-            cout << "Device connection was accepted" << endl;
+            cout << "Device interaction was accepted" << endl;
         }else{
             cout << "Wrong device, disconnecting" << endl;
             didDisconnect();
@@ -513,6 +531,19 @@ void ConnectionManager::printDeviceDescription(const BluetoothLEAdvertisementRec
 
 
 };
+
+void ConnectionManager::printBufferAsString(IBuffer const& buffer){
+    DataReader reader = DataReader::FromBuffer(buffer);
+    string result;
+    result.reserve(buffer.Length());
+
+    while(reader.UnconsumedBufferLength() > 0){
+        char c = static_cast<char>(reader.ReadByte());
+        result.push_back(c);
+    }
+    cout << "Value (string): " << result << endl;
+
+}
 
 bool ConnectionManager::isPheripheralNew(const BluetoothLEAdvertisementReceivedEventArgs& args){
     //Search already discovered devices
