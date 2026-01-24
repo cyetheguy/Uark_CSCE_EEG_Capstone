@@ -16,6 +16,8 @@ for %%a in (%*) do (
 		:: pip libraries
 		py -m pip install pycryptodome
 
+		:: Node.js install
+		nvm install latest
 
 		:: React install
 		npm install
