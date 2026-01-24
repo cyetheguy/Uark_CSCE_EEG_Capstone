@@ -18,7 +18,9 @@ for %%a in (%*) do (
 
 
 		:: React install
+		npm install
 		npm install vite @vitejs/plugin-react
+		npm install vite --save-dev
 		npm audit fix
 
 		exit
