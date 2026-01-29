@@ -84,7 +84,7 @@ def main():
     pass_in = input("Enter Password: ")
 
     # Send credentials to Back End
-    is_authenticated = backend_authenticate(user_in, pass_in)
+    is_authenticated = authenticate(user_in, pass_in)
 
     if is_authenticated:
         print("\n>> FRONT END: Access Granted. Session Key Established.")
@@ -92,4 +92,6 @@ def main():
         print("\n>> FRONT END: Access Denied. Credentials Rejected.")
 
 if __name__ == "__main__":
+    ##create_user_file("demo", "sleep123", "demo.USR")
+    ##create_user_file("admin", "admin123", "admin.USR")
     main()

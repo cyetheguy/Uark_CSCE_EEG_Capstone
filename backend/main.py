@@ -1,24 +1,47 @@
-import debug
 import sys
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
+# Import your existing custom modules
+# Ensure these files are in the same folder or properly referenced in PYTHONPATH
+import debug
+from crypto_usr_test import authenticate
 
-from crypto_usr_test import *
+app = Flask(__name__)
+CORS(app)  # Enables the React frontend to talk to this Python backend
 
+@app.route('/api/login', methods=['POST'])
+def login():
+    # 1. Get the JSON data sent from React
+    data = request.get_json()
+    
+    username = data.get('username')
+    password = data.get('password')
+
+    # 2. PRINT CREDENTIALS TO CONSOLE (As requested)
+    print("--------------------------------------------------")
+    print("INCOMING LOGIN REQUEST:")
+    print(f"Username: {username}")
+    print(f"Password: {password}")
+    print("--------------------------------------------------")
+
+    # 3. Verify against your existing authentication logic
+    print(f"Verification: {authenticate(username, password)}")
+    if authenticate(username, password):
+        return jsonify({"success": 1, "message": "Login successful"}), 200
+    else:
+        return jsonify({"success": 0, "message": "Invalid credentials"}), 200
 
 if __name__ == "__main__":
+    # Handle your existing debug flags
     for arg in sys.argv[1:]:
         if arg == "--debug":
             debug.setDebug(debug.DEBUG)
-            continue
         if arg == "--debug-gui":
             debug.setDebug(debug.DEBUG | debug.GUI)
-            continue
+
+    print("Server starting... Waiting for React requests on port 5000")
     
-    if(debug.getDebug(debug.GUI)):
-        while(True):
-            username = input("Username >> ")
-            password = input("Password >> ")
-            if(authenticate(username, password)):
-                break
-            else:
-                print("USER AUTHENTICATION FAILED!!!")
+    # Run the Flask server
+    # Note: We disable the CLI loop here so the Server can take control
+    app.run(debug=True, port=5000)
