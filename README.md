@@ -44,7 +44,7 @@ This software is intended to be run with *Python v3.9.2* within a Debian Linux V
 ><br><br>
 >This will pull download and execute the latest version of this software.
 
-To update this software, pull down the [main branch](https://github.com/nhsmith4/Laser-Tag/tree/main) of this project.
+To update this software, pull down the [main branch]([https://github.com/nhsmith4/Laser-Tag/tree/main](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main)) of this project.
 
 ## Required Installs
 ### Matplotlib
