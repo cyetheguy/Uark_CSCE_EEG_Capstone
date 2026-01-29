@@ -33,7 +33,6 @@ Table of Contents:<br>
 ><br><br>
 >This should update all libraries and packages needed to run the software, and immediately execute it.<br>
 
-This software is intended to be run with *Python v3.9.2* within a Debian Linux Virtual Machine.<br>
 
 ## Updating
 
