@@ -15,6 +15,7 @@ for %%a in (%*) do (
 
 		:: pip libraries
 		py -m pip install pycryptodome
+        py -m pip install Flask
 
 		:: Node.js install
 		nvm install latest
