@@ -49,6 +49,11 @@ const EEGDataReader: React.FC = () => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string>('');
+  const [edfPlotUrl, setEdfPlotUrl] = useState<string>('');
+  const [isStreamingEDF, setIsStreamingEDF] = useState<boolean>(false);
+  const [livePlotImage, setLivePlotImage] = useState<string>('');
+  const edfEventSourceRef = useRef<EventSource | null>(null);
+  const plotStreamRef = useRef<EventSource | null>(null);
   
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [deviceName, setDeviceName] = useState<string>('EEG_Sleep_Device');
@@ -275,6 +280,145 @@ const EEGDataReader: React.FC = () => {
     return stage ? stage.type : 'awake';
   };
 
+  const loadEDFPlot = async () => {
+    setIsLoading(true);
+    addUpdate('Starting real-time EDF stream at 100Hz...');
+    
+    try {
+      // Get EDF info first
+      const infoResponse = await fetch('http://localhost:5000/api/edf/info');
+      const infoData = await infoResponse.json();
+      
+      if (!infoData.success) {
+        addUpdate('No EDF files found in sessions folder');
+        setIsLoading(false);
+        return;
+      }
+      
+      addUpdate(`📊 Loading: ${infoData.filename}`);
+      addUpdate(`📡 Sampling rate: ${infoData.sampling_rate.toFixed(1)} Hz`);
+      addUpdate(`📈 Channels: ${infoData.labels.join(', ')}`);
+      
+      // Create session for streaming data
+      const now = new Date();
+      const sessionStart = new Date(now);
+      sessionStart.setHours(22, 0, 0, 0);
+      
+      const streamSession: SleepSessionData = {
+        id: `edf_stream_${Date.now()}`,
+        startTime: sessionStart,
+        endTime: new Date(sessionStart.getTime() + 8 * 60 * 60 * 1000),
+        deviceId: `🔴 LIVE: ${infoData.filename}`,
+        timestamps: [],
+        channelData: [],
+        sleepStages: generateMockSleepStages(sessionStart, new Date(sessionStart.getTime() + 8 * 60 * 60 * 1000)),
+        quality: 'good',
+        sessionType: 'night'
+      };
+      
+      setSleepSessions([streamSession]);
+      setSelectedSession(streamSession);
+      setIsStreamingEDF(true);
+      
+      // Connect to Python real-time plot stream - matplotlib updates every second
+      const plotStream = new EventSource('http://localhost:5000/api/edf/plot/stream');
+      plotStreamRef.current = plotStream;
+      plotStream.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.error) {
+            addUpdate(`Plot error: ${data.error}`);
+            return;
+          }
+          if (data.done) {
+            addUpdate('EDF file finished - plot stream ended');
+            plotStream.close();
+            return;
+          }
+          if (data.image) {
+            setLivePlotImage(data.image);
+          }
+        } catch (e) {
+          console.error('Plot stream parse error:', e);
+        }
+      };
+      plotStream.onerror = () => {
+        plotStream.close();
+      };
+      
+      // Connect to real-time data stream (for sample count display)
+      const eventSource = new EventSource('http://localhost:5000/api/edf/stream');
+      edfEventSourceRef.current = eventSource;
+      
+      let sampleCount = 0;
+      const streamStartTime = Date.now();
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.error) {
+            addUpdate(`❌ Error: ${data.error}`);
+            eventSource.close();
+            setIsStreamingEDF(false);
+            return;
+          }
+          
+          // Add sample to session
+          const timestamp = new Date(sessionStart.getTime() + data.timestamp * 1000);
+          streamSession.timestamps.push(timestamp);
+          streamSession.channelData.push([data.value]);
+          
+          // Update UI every 100 samples to avoid too many re-renders
+          if (sampleCount % 100 === 0) {
+            setSleepSessions([{...streamSession}]);
+            setSelectedSession({...streamSession});
+            
+            // Update activity log every 1000 samples
+            if (sampleCount % 1000 === 0) {
+              const elapsed = (Date.now() - streamStartTime) / 1000;
+              addUpdate(`🔴 Streaming: ${sampleCount} samples (${elapsed.toFixed(1)}s)`);
+            }
+          }
+          
+          sampleCount++;
+          
+        } catch (error) {
+          console.error('Error parsing stream:', error);
+        }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('Stream error:', error);
+        addUpdate('Stream ended or connection lost');
+        eventSource.close();
+        if (plotStreamRef.current) {
+          plotStreamRef.current.close();
+          plotStreamRef.current = null;
+        }
+        setIsStreamingEDF(false);
+      };
+      
+    } catch (error) {
+      console.error('Error starting stream:', error);
+      addUpdate('Failed to start EDF stream');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Cleanup streams on unmount
+  useEffect(() => {
+    return () => {
+      if (edfEventSourceRef.current) {
+        edfEventSourceRef.current.close();
+      }
+      if (plotStreamRef.current) {
+        plotStreamRef.current.close();
+      }
+    };
+  }, []);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -297,6 +441,8 @@ const EEGDataReader: React.FC = () => {
       if (data.success === 1) {
         console.log("Backend returned 1: Success");
         setIsAuthenticated(true);
+        // Load EDF plot after successful login
+        setTimeout(() => loadEDFPlot(), 100);
       } else {
         console.log("Backend returned 0: Failure");
         alert("Login Failed: Invalid Username or Password");
@@ -786,6 +932,88 @@ const EEGDataReader: React.FC = () => {
           </div>
         )}
 
+        {/* EDF Python Visualization */}
+        {edfPlotUrl && (
+          <div className="visualization-panel">
+            <div className="panel-header">
+              <h2>EDF File Analysis (Python Generated)</h2>
+            </div>
+            <div className="visualization-content">
+              <div style={{ 
+                backgroundColor: '#2d3748', 
+                borderRadius: '8px',
+                padding: '1rem',
+                textAlign: 'center'
+              }}>
+                <img 
+                  src={edfPlotUrl} 
+                  alt="EEG Analysis" 
+                  style={{ 
+                    width: '100%', 
+                    maxWidth: '1200px',
+                    height: 'auto',
+                    borderRadius: '8px'
+                  }}
+                />
+                <p style={{ 
+                  color: '#cbd5e0', 
+                  marginTop: '1rem',
+                  fontSize: '0.9rem'
+                }}>
+                  Real-time EEG analysis from backend/sessions/SC4001E0-PSG.edf
+                  <br />
+                  Generated using matplotlib with power spectrum analysis
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Real-Time EDF Stream Status */}
+        {isStreamingEDF && (
+          <div className="visualization-panel">
+            <div className="panel-header">
+              <h2>🔴 LIVE EDF Stream - 100Hz</h2>
+            </div>
+            <div className="visualization-content" style={{ padding: '1rem' }}>
+              <div style={{ 
+                backgroundColor: '#234e52', 
+                borderRadius: '8px',
+                padding: '1.5rem',
+                border: '2px solid #38b2ac'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <span style={{ 
+                    display: 'inline-block', 
+                    width: '12px', 
+                    height: '12px', 
+                    backgroundColor: '#f56565', 
+                    borderRadius: '50%',
+                    animation: 'pulse 1.5s infinite'
+                  }}></span>
+                  <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>
+                    Real-Time Data Streaming Active
+                  </span>
+                </div>
+                <div style={{ color: '#b2f5ea', fontSize: '0.95rem', lineHeight: '1.8' }}>
+                  <p style={{ margin: '0.5rem 0' }}>
+                    📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf
+                  </p>
+                  <p style={{ margin: '0.5rem 0' }}>
+                    ⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)
+                  </p>
+                  <p style={{ margin: '0.5rem 0' }}>
+                    📊 <strong>Samples Loaded:</strong> {selectedSession?.channelData.length.toLocaleString() || 0}
+                  </p>
+                  <p style={{ margin: '0.5rem 0' }}>
+                    ⏱️ <strong>Duration:</strong> {selectedSession ? (selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* EEG Sleep Session Visualization */}
         <div className="visualization-panel">
           <div className="panel-header">
@@ -833,32 +1061,75 @@ const EEGDataReader: React.FC = () => {
           
           {selectedSession ? (
             <div className="visualization-content">
-              {/* Recharts Graph for Sleep EEG */}
-              <div className="sleep-graph">
-                <div className="graph-header">
-                  <h3>Sleep EEG - Channel {selectedChannel + 1}</h3>
-                  <span className="graph-scale">
-                    Whole Night Sleep Session
-                  </span>
+              {/* Python real-time matplotlib graph - updates every second when streaming */}
+              {isStreamingEDF ? (
+                <div className="sleep-graph">
+                  <div className="graph-header">
+                    <h3>EEG Analysis (Python matplotlib – real-time)</h3>
+                    <span className="graph-scale">🔴 LIVE • Python updates graph every 1s</span>
+                  </div>
+                  <div className="graph-container" style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#2d3748', borderRadius: '8px' }}>
+                    {livePlotImage ? (
+                      <img
+                        src={livePlotImage}
+                        alt="EEG Signal and Power Spectrum"
+                        style={{
+                          width: '100%',
+                          maxWidth: '1100px',
+                          height: 'auto',
+                          borderRadius: '8px',
+                          border: '2px solid #4a5568'
+                        }}
+                      />
+                    ) : (
+                      <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e0' }}>
+                        Starting Python plot stream...
+                      </div>
+                    )}
+                    <p style={{ color: '#cbd5e0', marginTop: '0.75rem', fontSize: '0.9rem' }}>
+                      backend/sessions/SC4001E0-PSG.edf • 20s window • X-axis: time into recording (seconds) • Power spectrum (Delta, Theta, Alpha, Beta)
+                    </p>
+                  </div>
+                  <div className="graph-footer">
+                    <span>Time (seconds)</span>
+                    <span>Amplitude (µV) / Power</span>
+                  </div>
                 </div>
-                <div className="graph-container">
-                  <EEGChart
-                    data={getChartData()}
-                    channel={selectedChannel}
-                    height={400}
-                    timeRange={8 * 60 * 60} // 8 hours in seconds
-                    color={settings.sleepStageColors.deep}
-                    showStats={true}
-                    sleepStages={selectedSession.sleepStages}
-                    showSleepStages={settings.showSleepStages}
-                    yAxisRange={settings.yAxisRange}
-                  />
-                </div>
-                <div className="graph-footer">
-                  <span>Time (Hours of Sleep)</span>
-                  <span>Amplitude (µV)</span>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="sleep-graph">
+                    <div className="graph-header">
+                      <h3>Sleep EEG - Channel {selectedChannel + 1}</h3>
+                      <span className="graph-scale">Whole Night Sleep Session</span>
+                    </div>
+                    <div className="graph-container">
+                      {selectedSession.channelData.length > 0 ? (
+                        <EEGChart
+                          key={`chart-${selectedSession.id}-${selectedSession.channelData.length}`}
+                          data={getChartData()}
+                          channel={selectedChannel}
+                          height={400}
+                          timeRange={selectedSession.channelData.length / 100}
+                          color={settings.sleepStageColors.deep}
+                          showStats={true}
+                          sleepStages={selectedSession.sleepStages}
+                          showSleepStages={settings.showSleepStages}
+                          yAxisRange={settings.yAxisRange}
+                          chartType={settings.chartType}
+                        />
+                      ) : (
+                        <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2d3748', borderRadius: '8px', color: '#cbd5e0' }}>
+                          No data
+                        </div>
+                      )}
+                    </div>
+                    <div className="graph-footer">
+                      <span>Time (Hours of Sleep)</span>
+                      <span>Amplitude (µV)</span>
+                    </div>
+                  </div>
+                </>
+              )}
               
               {/* Sleep Stage Timeline */}
               {settings.showSleepStages && (
