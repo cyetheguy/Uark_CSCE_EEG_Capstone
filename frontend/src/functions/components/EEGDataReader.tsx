@@ -282,35 +282,9 @@ const EEGDataReader: React.FC = () => {
     
     // Simulate authentication delay
     await new Promise(resolve => setTimeout(resolve, 800));
-    try {
-      const response = await fetch('http://localhost:5000/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json();
-
-      // CHECK FOR STATUS 1 HERE
-      if (data.success === 1) {
-        console.log("Backend returned 1: Success");
-        setIsAuthenticated(true);
-      } else {
-        console.log("Backend returned 0: Failure");
-        alert("Login Failed: Invalid Username or Password");
-      }
-
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Server connection failed");
-    } finally {
-      setIsLoading(false);
-    }
     
     // Check credentials
-    /*if (
+    if (
       (username === DEMO_CREDENTIALS.username && password === DEMO_CREDENTIALS.password) ||
       (username === DEMO_CREDENTIALS.admin.username && password === DEMO_CREDENTIALS.admin.password)
     ) {
@@ -320,9 +294,8 @@ const EEGDataReader: React.FC = () => {
     } else {
       setLoginError('Invalid username or password. Try demo/sleep123 or admin/admin123');
     }
-   
     
-    setIsLoading(false);*/
+    setIsLoading(false);
   };
 
   const handleLogout = () => {
@@ -992,5 +965,7 @@ const EEGDataReader: React.FC = () => {
     </div>
   );
 };
+
+
 
 export default EEGDataReader;
