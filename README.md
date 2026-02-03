@@ -37,13 +37,13 @@ Table of Contents:<br>
 ## Updating
 
 >[!TIP]
-><br>It is recommended to update this program via a shell script. To utilize this feature, download/locate [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat) and execute the following command within its directory (hopefully this is done): 
+><br>It is recommended to update this program via a shell script. To utilize this feature, download/locate [eeg_app.bat](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat) and execute the following command within its directory (hopefully this is done): 
 >
 >```./eeg_app.bat --update```
 ><br><br>
 >This will pull download and execute the latest version of this software.
 
-To update this software, pull down the [main branch]([https://github.com/nhsmith4/Laser-Tag/tree/main](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main)) of this project.
+To update this software, pull down the [main branch](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main) of this project.
 
 ## Required Installs
 ### Matplotlib
@@ -54,5 +54,6 @@ This project was designed and developed by Team 17. The following are the names 
 <br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
 <br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
 <br>&emsp;&emsp;Dylan Wilkins:&emsp;&emsp;&ensp;&ensp;[@DJW032](https://github.com/DJW032)
+<br>&emsp;&emsp;William Taylor:&emsp;&emsp;&ensp;&ensp;[@Will-Taylor08](https://github.com/Will-Taylor08)
 
-<br><br>(Edit) To see the full graph of contribution, visit <a href="https://github.com/nhsmith4/Laser-Tag/graphs/contributors">here</a>.
+<br><br>(Edit) To see the full graph of contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
