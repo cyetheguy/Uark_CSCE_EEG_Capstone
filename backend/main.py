@@ -5,6 +5,7 @@ from flask_cors import CORS
 # Import your existing custom modules
 # Ensure these files are in the same folder or properly referenced in PYTHONPATH
 import debug
+from debug import printDebug
 from crypto_usr_test import authenticate
 
 app = Flask(__name__)
@@ -19,14 +20,12 @@ def login():
     password = data.get('password')
 
     # 2. PRINT CREDENTIALS TO CONSOLE (As requested)
-    print("--------------------------------------------------")
-    print("INCOMING LOGIN REQUEST:")
-    print(f"Username: {username}")
-    print(f"Password: {password}")
-    print("--------------------------------------------------")
+    printDebug("LOGIN REQUEST:")
+    printDebug(f"\tUsername: {username}")
+    printDebug(f"\tPassword: {password}")
 
     # 3. Verify against your existing authentication logic
-    print(f"Verification: {authenticate(username, password)}")
+    printDebug(f"Verification: {authenticate(username, password)}")
     if authenticate(username, password):
         return jsonify({"success": 1, "message": "Login successful"}), 200
     else:
@@ -40,7 +39,7 @@ if __name__ == "__main__":
         if arg == "--debug-gui":
             debug.setDebug(debug.DEBUG | debug.GUI)
 
-    print("Server starting... Waiting for React requests on port 5000")
+    print("Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
     
     # Run the Flask server
     # Note: We disable the CLI loop here so the Server can take control
