@@ -224,7 +224,9 @@ const EEGChart: React.FC<EEGChartProps> = ({
         </div>
       )}
       
-      <ResponsiveContainer width="100%" height={showStats ? 'calc(100% - 50px)' : '100%'}>
+      {/* <ResponsiveContainer width="100%" height={showStats ? 'calc(100% - 50px)' : '100%'}> */}
+      <ResponsiveContainer width="100%">
+
         {chartType === 'area' ? (
           <AreaChart data={chartData}>
             <CartesianGrid 

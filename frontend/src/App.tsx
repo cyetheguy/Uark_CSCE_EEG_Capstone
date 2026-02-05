@@ -16,7 +16,7 @@
 import React from 'react';
 import './App.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import EEGDataReader from './functions/components/EEGDataReader';
+import EEGDataReader from './functions/components/EEGDataReader/EEGDataReader';
 
 const App: React.FC = () => {
   return (
