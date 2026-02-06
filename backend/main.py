@@ -24,6 +24,23 @@ BACKEND_DIR = Path(__file__).parent
 SESSIONS_DIR = BACKEND_DIR / "sessions"
 USER_DIR = BACKEND_DIR / "user"
 
+def get_edf_file_for_user(username: str) -> Path:
+    """Return which EDF file to use for this user (demo vs admin)."""
+    u = (username or "").strip().lower()
+    if u == "demo":
+        p = SESSIONS_DIR / "SC4001E0-PSG.edf"
+    elif u == "admin":
+        p = SESSIONS_DIR / "SC4002E0-PSG.edf"
+    else:
+        edf_files = list(SESSIONS_DIR.glob("*.edf"))
+        p = edf_files[0] if edf_files else None
+    if p and p.exists():
+        return p
+    edf_files = list(SESSIONS_DIR.glob("*.edf"))
+    if edf_files:
+        return edf_files[0]
+    raise FileNotFoundError("No EDF files in sessions directory")
+
 def username_exists(username: str) -> bool:
     """Check if a username already exists by checking .USR filenames"""
     if not USER_DIR.exists():
@@ -124,7 +141,8 @@ def read_edf_samples(edf_path, channel_idx=0, max_samples=3000):
         
         return np.array(samples), sfreq, header['labels'][channel_idx]
 
-WINDOW_SECONDS = 20
+WINDOW_SECONDS = 5
+PLOT_UPDATE_INTERVAL = 0.1  # seconds between plot updates (~10 FPS; data still advances at 100Hz)
 
 def generate_eeg_plot(samples, sfreq, channel_label, time_start_sec=0):
     """Generate matplotlib plot of EEG data with power spectrum.
@@ -134,7 +152,7 @@ def generate_eeg_plot(samples, sfreq, channel_label, time_start_sec=0):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     fig.suptitle(f'EEG Analysis - {channel_label}', fontsize=14, fontweight='bold')
     
-    # Plot 1: Time-domain signal (20 second window)
+    # Plot 1: Time-domain signal (5 second window)
     display_samples = min(int(WINDOW_SECONDS * sfreq), len(samples))
     # X-axis: show actual time interval in recording (e.g. 10s - 30s)
     time_axis = time_start_sec + np.arange(display_samples) / sfreq
@@ -374,75 +392,68 @@ def get_edf_plot():
 
 @app.route('/api/edf/plot/stream', methods=['GET'])
 def stream_edf_plot():
-    """Stream matplotlib plots in real time - Python updates the graph every second"""
+    """Stream matplotlib plots in real time; data advances at 100Hz, new plot every PLOT_UPDATE_INTERVAL."""
+    import json as _json
+    # Resolve EDF file and header once (outside generator) so errors return immediately
+    try:
+        username = request.args.get('username', 'demo')
+        edf_file = get_edf_file_for_user(username)
+        with open(str(edf_file), 'rb') as fh:
+            header = read_edf_header(fh)
+        channel_label = header['labels'][0]
+        sfreq = header['samples_per_record'][0] / header['record_duration']
+        edf_path = str(edf_file)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        from flask import Response
+        return Response(
+            f"data: {_json.dumps({'error': str(e)})}\n\n",
+            mimetype='text/event-stream',
+            headers={'Cache-Control': 'no-cache'}
+        )
+
     def generate():
         import time
         import json
-        
-        try:
-            edf_files = list(SESSIONS_DIR.glob('*.edf'))
-            if not edf_files:
-                yield f"data: {json.dumps({'error': 'No EDF files found'})}\n\n"
-                return
-            
-            edf_file = edf_files[0]
-            with open(str(edf_file), 'rb') as fh:
-                header = read_edf_header(fh)
-            channel_label = header['labels'][0]
-            sfreq = header['samples_per_record'][0] / header['record_duration']
-            window_samples = min(int(WINDOW_SECONDS * sfreq), 2000)  # 20 sec window, max 2000
-            samples_per_update = max(1, int(sfreq))     # 1 second of data per update
-            
-            sample_iter = iter_edf_samples_continuously(str(edf_file), channel_idx=0)
-            buffer = []
-            total_samples_read = 0
-            
-            printDebug(f"Starting real-time plot stream: {edf_file.name} at {sfreq} Hz ({WINDOW_SECONDS}s window)")
-            
-            update_count = 0
-            while True:
-                # Collect 1 second of new samples
-                for _ in range(samples_per_update):
-                    try:
-                        buffer.append(next(sample_iter))
-                        total_samples_read += 1
-                    except StopIteration:
-                        yield f"data: {json.dumps({'done': True})}\n\n"
-                        return
-                
-                # Keep only last 20 seconds
-                if len(buffer) > window_samples:
-                    buffer = buffer[-window_samples:]
-                
-                if len(buffer) < 10:
-                    time.sleep(1)
-                    continue
-                
-                # Time at start of current window (seconds into recording)
-                time_start_sec = max(0, (total_samples_read - len(buffer)) / sfreq)
-                buf_arr = np.array(buffer, dtype=float)
+        window_samples = min(int(WINDOW_SECONDS * sfreq), 2000)
+        samples_per_update = max(1, int(sfreq * PLOT_UPDATE_INTERVAL))
+        sample_iter = iter_edf_samples_continuously(edf_path, channel_idx=0)
+        buffer = []
+        total_samples_read = 0
+        update_count = 0
+        printDebug(f"Plot stream: {edf_file.name} at {sfreq} Hz, plot every {PLOT_UPDATE_INTERVAL}s")
+        while True:
+            for _ in range(samples_per_update):
                 try:
-                    img_buffer = generate_eeg_plot(buf_arr, sfreq, channel_label, time_start_sec=time_start_sec)
-                    img_buffer.seek(0)
-                    b64 = base64.b64encode(img_buffer.read()).decode('utf-8')
-                    yield f"data: {json.dumps({'image': f'data:image/png;base64,{b64}', 'samples': len(buffer)})}\n\n"
-                    update_count += 1
-                    if update_count % 10 == 0:
-                        printDebug(f"Plot stream: sent {update_count} updates, {len(buffer)} samples")
-                except Exception as e:
-                    printDebug(f"Plot gen error: {e}")
-                
-                time.sleep(1)  # New graph every 1 second
-                
-                if update_count > 3600:
-                    break
-                    
-        except Exception as e:
-            printDebug(f"Plot stream error: {e}")
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
+                    buffer.append(next(sample_iter))
+                    total_samples_read += 1
+                except StopIteration:
+                    yield f"data: {json.dumps({'done': True})}\n\n"
+                    return
+            if len(buffer) > window_samples:
+                buffer = buffer[-window_samples:]
+            if len(buffer) < 10:
+                time.sleep(PLOT_UPDATE_INTERVAL)
+                continue
+            time_start_sec = max(0, (total_samples_read - len(buffer)) / sfreq)
+            buf_arr = np.array(buffer, dtype=float)
+            try:
+                img_buffer = generate_eeg_plot(buf_arr, sfreq, channel_label, time_start_sec=time_start_sec)
+                img_buffer.seek(0)
+                b64 = base64.b64encode(img_buffer.read()).decode('utf-8')
+                yield f"data: {json.dumps({'image': f'data:image/png;base64,{b64}', 'samples': len(buffer)})}\n\n"
+                update_count += 1
+                if update_count % 50 == 0:
+                    printDebug(f"Plot stream: sent {update_count} updates")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                yield f"data: {json.dumps({'error': f'Plot gen: {e}'})}\n\n"
+            time.sleep(PLOT_UPDATE_INTERVAL)
+            if update_count > 36000:
+                break
+
     from flask import Response
     return Response(generate(), mimetype='text/event-stream', headers={
         'Cache-Control': 'no-cache',
@@ -453,15 +464,10 @@ def stream_edf_plot():
 def get_edf_info():
     """Get EDF file information"""
     try:
-        edf_files = list(SESSIONS_DIR.glob('*.edf'))
-        if not edf_files:
-            return jsonify({"success": False, "error": "No EDF files found"}), 404
-        
-        edf_file = edf_files[0]
-        
+        username = request.args.get('username', 'demo')
+        edf_file = get_edf_file_for_user(username)
         with open(str(edf_file), 'rb') as fh:
             header = read_edf_header(fh)
-        
         return jsonify({
             "success": True,
             "filename": edf_file.name,

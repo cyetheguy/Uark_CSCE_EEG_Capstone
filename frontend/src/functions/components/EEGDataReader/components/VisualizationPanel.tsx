@@ -92,7 +92,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
           <div className="sleep-graph">
             <div className="graph-header">
               <h3>EEG Analysis (Python matplotlib – real-time)</h3>
-              <span className="graph-scale">🔴 LIVE • Python updates graph every 1s</span>
+              <span className="graph-scale">🔴 LIVE • Python updates graph every 0.1s (100Hz data)</span>
             </div>
             <div className="graph-container" style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#2d3748', borderRadius: '8px' }}>
               {edfStreamState.livePlotImage ? (
@@ -107,13 +107,18 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                     border: '2px solid #4a5568'
                   }}
                 />
+              ) : edfStreamState.plotError ? (
+                <div style={{ padding: '2rem', color: '#feb2b2', textAlign: 'center' }}>
+                  <p><strong>Stream error:</strong></p>
+                  <p>{edfStreamState.plotError}</p>
+                </div>
               ) : (
                 <div style={{ height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e0' }}>
                   Starting Python plot stream...
                 </div>
               )}
               <p style={{ color: '#cbd5e0', marginTop: '0.75rem', fontSize: '0.9rem' }}>
-                backend/sessions/SC4001E0-PSG.edf • 20s window • X-axis: time into recording (seconds) • Power spectrum (Delta, Theta, Alpha, Beta)
+                backend/sessions/SC4001E0-PSG.edf • 5s window • X-axis: time into recording (seconds) • Power spectrum (Delta, Theta, Alpha, Beta)
               </p>
             </div>
             <div className="graph-footer">

@@ -46,11 +46,10 @@ const EEGDataReader: React.FC = () => {
   // Effects
   useEffect(() => {
     if (auth.isAuthenticated) {
-      // Load EDF plot on authentication
-      sleepData.loadEDFPlot();
+      sleepData.loadEDFPlot(auth.username || 'demo');
       updates.addUpdate('Starting real-time EDF stream at 100Hz...');
     }
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, auth.username]);
 
   useEffect(() => {
     if (mode === 'review' && auth.isAuthenticated && sleepData.sessionList.length === 0) {
@@ -137,25 +136,26 @@ const EEGDataReader: React.FC = () => {
     }));
   };
 
-  // Render Login Screen
+  // Render Login Screen (inside 16:9 viewport)
   if (!auth.isAuthenticated) {
     return (
-      <LoginScreen
-        username={auth.username}
-        password={auth.password}
-        loginError={auth.loginError}
-        isLoading={auth.isLoading}
-        onUsernameChange={auth.setUsername}
-        onPasswordChange={auth.setPassword}
-        onLogin={auth.handleLogin}
-      />
+      <div className="eeg-app-viewport">
+        <LoginScreen
+          username={auth.username}
+          password={auth.password}
+          loginError={auth.loginError}
+          isLoading={auth.isLoading}
+          onUsernameChange={auth.setUsername}
+          onPasswordChange={auth.setPassword}
+          onLogin={auth.handleLogin}
+        />
+      </div>
     );
   }
 
-  // Render Main Application
+  // Render Main Application (full-width, pre-16:9 layout)
   return (
     <div className="app-container">
-      {/* Settings Screen Overlay */}
       {showSettings && (
         <SettingsScreen
           settings={settings.settings}
@@ -164,8 +164,7 @@ const EEGDataReader: React.FC = () => {
           onClose={() => setShowSettings(false)}
         />
       )}
-      
-      {/* Header */}
+
       <Header
         username={auth.username}
         mode={mode}
@@ -174,9 +173,7 @@ const EEGDataReader: React.FC = () => {
         onLogout={handleLogout}
       />
 
-      {/* Main Content */}
       <main className="main-content">
-        {/* Session Panel */}
         <SessionPanel
           mode={mode}
           sleepSessions={sleepData.sleepSessions}
@@ -192,40 +189,24 @@ const EEGDataReader: React.FC = () => {
           onClearData={handleClearData}
         />
 
-        {/* Sleep Statistics */}
         <SleepStatsPanel
           sleepStats={sleepStats}
           settings={settings.settings}
         />
 
-        {/* EDF Python Visualization */}
         {sleepData.edfStreamState.edfPlotUrl && (
           <div className="visualization-panel">
             <div className="panel-header">
               <h2>EDF File Analysis (Python Generated)</h2>
             </div>
             <div className="visualization-content">
-              <div style={{ 
-                backgroundColor: '#2d3748', 
-                borderRadius: '8px',
-                padding: '1rem',
-                textAlign: 'center'
-              }}>
-                <img 
-                  src={sleepData.edfStreamState.edfPlotUrl} 
-                  alt="EEG Analysis" 
-                  style={{ 
-                    width: '100%', 
-                    maxWidth: '1200px',
-                    height: 'auto',
-                    borderRadius: '8px'
-                  }}
+              <div style={{ backgroundColor: '#2d3748', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
+                <img
+                  src={sleepData.edfStreamState.edfPlotUrl}
+                  alt="EEG Analysis"
+                  style={{ width: '100%', maxWidth: '1200px', height: 'auto', borderRadius: '8px' }}
                 />
-                <p style={{ 
-                  color: '#cbd5e0', 
-                  marginTop: '1rem',
-                  fontSize: '0.9rem'
-                }}>
+                <p style={{ color: '#cbd5e0', marginTop: '1rem', fontSize: '0.9rem' }}>
                   Real-time EEG analysis from backend/sessions/SC4001E0-PSG.edf
                   <br />
                   Generated using matplotlib with power spectrum analysis
@@ -235,52 +216,28 @@ const EEGDataReader: React.FC = () => {
           </div>
         )}
 
-        {/* Real-Time EDF Stream Status */}
         {sleepData.edfStreamState.isStreaming && (
           <div className="visualization-panel">
             <div className="panel-header">
               <h2>🔴 LIVE EDF Stream - 100Hz</h2>
             </div>
             <div className="visualization-content" style={{ padding: '1rem' }}>
-              <div style={{ 
-                backgroundColor: '#234e52', 
-                borderRadius: '8px',
-                padding: '1.5rem',
-                border: '2px solid #38b2ac'
-              }}>
+              <div style={{ backgroundColor: '#234e52', borderRadius: '8px', padding: '1.5rem', border: '2px solid #38b2ac' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  <span style={{ 
-                    display: 'inline-block', 
-                    width: '12px', 
-                    height: '12px', 
-                    backgroundColor: '#f56565', 
-                    borderRadius: '50%',
-                    animation: 'pulse 1.5s infinite'
-                  }}></span>
-                  <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>
-                    Real-Time Data Streaming Active
-                  </span>
+                  <span style={{ width: 12, height: 12, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
+                  <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>Real-Time Data Streaming Active</span>
                 </div>
                 <div style={{ color: '#b2f5ea', fontSize: '0.95rem', lineHeight: '1.8' }}>
-                  <p style={{ margin: '0.5rem 0' }}>
-                    📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf
-                  </p>
-                  <p style={{ margin: '0.5rem 0' }}>
-                    ⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)
-                  </p>
-                  <p style={{ margin: '0.5rem 0' }}>
-                    📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}
-                  </p>
-                  <p style={{ margin: '0.5rem 0' }}>
-                    ⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes
-                  </p>
+                  <p style={{ margin: '0.5rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
+                  <p style={{ margin: '0.5rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
+                  <p style={{ margin: '0.5rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
+                  <p style={{ margin: '0.5rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Visualization Panel */}
         <VisualizationPanel
           selectedSession={sleepData.selectedSession}
           settings={settings.settings}
@@ -296,7 +253,6 @@ const EEGDataReader: React.FC = () => {
           getChartData={getChartData}
         />
 
-        {/* Updates Log */}
         <UpdatesLog
           updates={updates.updates}
           autoScroll={autoScroll}
@@ -305,7 +261,6 @@ const EEGDataReader: React.FC = () => {
         />
       </main>
 
-      {/* Footer */}
       <Footer mode={mode} />
     </div>
   );

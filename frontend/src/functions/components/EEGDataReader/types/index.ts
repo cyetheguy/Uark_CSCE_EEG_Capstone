@@ -60,4 +60,5 @@ export interface EDFStreamState {
   isStreaming: boolean;
   livePlotImage: string;
   edfPlotUrl: string;
+  plotError?: string;
 }

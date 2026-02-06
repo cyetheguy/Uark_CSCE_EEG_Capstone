@@ -10,7 +10,8 @@ export const useSleepData = () => {
   const [edfStreamState, setEdfStreamState] = useState<EDFStreamState>({
     isStreaming: false,
     livePlotImage: '',
-    edfPlotUrl: ''
+    edfPlotUrl: '',
+    plotError: ''
   });
   
   const edfEventSourceRef = useRef<EventSource | null>(null);
@@ -167,11 +168,11 @@ export const useSleepData = () => {
     setSessionList(demoList);
   }, []);
 
-  const loadEDFPlot = useCallback(async () => {
+  const loadEDFPlot = useCallback(async (username: string = 'demo') => {
     setIsLoading(true);
     
     try {
-      const infoResponse = await fetch('http://localhost:5000/api/edf/info');
+      const infoResponse = await fetch(`http://localhost:5000/api/edf/info?username=${encodeURIComponent(username)}`);
       const infoData = await infoResponse.json();
       
       if (!infoData.success) {
@@ -197,9 +198,10 @@ export const useSleepData = () => {
       
       setSleepSessions([streamSession]);
       setSelectedSession(streamSession);
-      setEdfStreamState(prev => ({ ...prev, isStreaming: true }));
+      setEdfStreamState(prev => ({ ...prev, isStreaming: true, livePlotImage: '', plotError: '' }));
       
-      const plotStream = new EventSource('http://localhost:5000/api/edf/plot/stream');
+      const plotUrl = `http://localhost:5000/api/edf/plot/stream?username=${encodeURIComponent(username)}`;
+      const plotStream = new EventSource(plotUrl);
       plotStreamRef.current = plotStream;
       
       plotStream.onmessage = (event) => {
@@ -207,6 +209,7 @@ export const useSleepData = () => {
           const data = JSON.parse(event.data);
           if (data.error) {
             console.error('Plot error:', data.error);
+            setEdfStreamState(prev => ({ ...prev, plotError: data.error }));
             return;
           }
           if (data.done) {
@@ -214,7 +217,7 @@ export const useSleepData = () => {
             return;
           }
           if (data.image) {
-            setEdfStreamState(prev => ({ ...prev, livePlotImage: data.image }));
+            setEdfStreamState(prev => ({ ...prev, livePlotImage: data.image, plotError: '' }));
           }
         } catch (e) {
           console.error('Plot stream parse error:', e);
@@ -223,6 +226,7 @@ export const useSleepData = () => {
       
       plotStream.onerror = () => {
         plotStream.close();
+        setEdfStreamState(prev => ({ ...prev, plotError: prev.plotError || 'Connection lost' }));
       };
       
       const eventSource = new EventSource('http://localhost:5000/api/edf/stream');
