@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 # Import your existing custom modules
 import debug
 from debug import printDebug
-from crypto_usr_test import authenticate
+from crypto_usr_test import authenticate, create_user_file
+import glob
 
 app = Flask(__name__)
 CORS(app)  # Enables the React frontend to talk to this Python backend
@@ -21,6 +22,23 @@ CORS(app)  # Enables the React frontend to talk to this Python backend
 # Get the directory where this script is located
 BACKEND_DIR = Path(__file__).parent
 SESSIONS_DIR = BACKEND_DIR / "sessions"
+USER_DIR = BACKEND_DIR / "user"
+
+def username_exists(username: str) -> bool:
+    """Check if a username already exists by checking .USR filenames"""
+    if not USER_DIR.exists():
+        return False
+    
+    # Check if a file with this username exists (case-insensitive)
+    username_lower = username.lower()
+    usr_files = glob.glob(str(USER_DIR / "*.USR"))
+    
+    for file_path in usr_files:
+        file_username = Path(file_path).stem.lower()
+        if file_username == username_lower:
+            return True
+    
+    return False
 
 def read_edf_header(fh):
     """Read EDF header"""
@@ -190,6 +208,48 @@ def login():
         return jsonify({"success": 1, "message": "Login successful"}), 200
     else:
         return jsonify({"success": 0, "message": "Invalid credentials"}), 200
+
+@app.route('/api/create-account', methods=['POST'])
+def create_account():
+    """Create a new user account and save as .USR file"""
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    printDebug("CREATE ACCOUNT REQUEST:")
+    printDebug(f"\tUsername: {username}")
+    
+    # Validation
+    if not username:
+        return jsonify({"success": False, "error": "Username is required"}), 400
+    
+    if not password or len(password) < 6:
+        return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
+    
+    # Check if username already exists
+    if username_exists(username):
+        return jsonify({"success": False, "error": "Username already exists"}), 400
+    
+    try:
+        # Ensure user directory exists
+        USER_DIR.mkdir(exist_ok=True)
+        
+        # Create the .USR file - use absolute path
+        filename = str(USER_DIR / f"{username}.USR")
+        create_user_file(username, password, filename)
+        
+        printDebug(f"Created user file: {filename}")
+        
+        return jsonify({
+            "success": True,
+            "message": f"Account '{username}' created successfully"
+        }), 200
+        
+    except Exception as e:
+        printDebug(f"Error creating account: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": f"Failed to create account: {str(e)}"}), 500
 
 def iter_edf_samples_continuously(edf_path, channel_idx=0):
     """Generator that yields EDF samples one at a time"""
