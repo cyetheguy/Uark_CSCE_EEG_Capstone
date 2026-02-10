@@ -58,7 +58,6 @@ export interface ChartDataPoint {
 
 export interface EDFStreamState {
   isStreaming: boolean;
-  livePlotImage: string;
-  edfPlotUrl: string;
+  // Removed livePlotImage and edfPlotUrl
   plotError?: string;
 }
