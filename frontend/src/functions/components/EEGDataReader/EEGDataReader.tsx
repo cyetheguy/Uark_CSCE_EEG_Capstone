@@ -192,12 +192,36 @@ const EEGDataReader: React.FC = () => {
                 onClearData={handleClearData}
               />
 
-              <UpdatesLog
-                updates={updates.updates}
-                autoScroll={autoScroll}
-                onAutoScrollChange={setAutoScroll}
-                onClearUpdates={handleClearUpdates}
-              />
+              {sleepData.edfStreamState.isStreaming && (
+                <div className="visualization-panel">
+                  <div className="panel-header">
+                    <h2>Device Health</h2>
+                  </div>
+                  <div className="visualization-content" style={{ padding: '0.85rem' }}>
+                    <div style={{ backgroundColor: '#234e52', borderRadius: '10px', padding: '1rem', border: '2px solid #38b2ac' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <span style={{ width: 10, height: 10, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
+                        <span style={{ color: '#e6fffa', fontSize: '0.95rem', fontWeight: 'bold' }}>Streaming from EEG Sleep Device</span>
+                      </div>
+                      <div style={{ color: '#b2f5ea', fontSize: '0.8rem', lineHeight: '1.6' }}>
+                        <p style={{ margin: '0.3rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
+                        <p style={{ margin: '0.3rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
+                        <p style={{ margin: '0.3rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
+                        <p style={{ margin: '0.3rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {showRawData && (
+                <UpdatesLog
+                  updates={updates.updates}
+                  autoScroll={autoScroll}
+                  onAutoScrollChange={setAutoScroll}
+                  onClearUpdates={handleClearUpdates}
+                />
+              )}
             </section>
 
             <section className="dashboard-center">
@@ -208,28 +232,6 @@ const EEGDataReader: React.FC = () => {
                   </div>
                   <div className="visualization-content">
                     <div className="error-message">{sleepData.edfStreamState.plotError}</div>
-                  </div>
-                </div>
-              )}
-
-              {sleepData.edfStreamState.isStreaming && (
-                <div className="visualization-panel">
-                  <div className="panel-header">
-                    <h2>🔴 LIVE EDF Stream - 100Hz</h2>
-                  </div>
-                  <div className="visualization-content" style={{ padding: '1rem' }}>
-                    <div style={{ backgroundColor: '#234e52', borderRadius: '8px', padding: '1.5rem', border: '2px solid #38b2ac' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                        <span style={{ width: 12, height: 12, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
-                        <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>Real-Time Data Streaming Active</span>
-                      </div>
-                      <div style={{ color: '#b2f5ea', fontSize: '0.95rem', lineHeight: '1.8' }}>
-                        <p style={{ margin: '0.5rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
-                        <p style={{ margin: '0.5rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
-                        <p style={{ margin: '0.5rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
-                        <p style={{ margin: '0.5rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}

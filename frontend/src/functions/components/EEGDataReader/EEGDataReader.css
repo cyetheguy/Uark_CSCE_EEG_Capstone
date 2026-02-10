@@ -74,9 +74,9 @@
 
 /* Let the activity log use leftover height in the sidebar */
 .dashboard-left .updates-panel {
-  flex: 1;
-  min-height: 260px;
-  max-height: calc(100% - 1rem);
+  flex: 0 0 210px; /* shorter, fixed-height log */
+  min-height: 180px;
+  max-height: 230px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
