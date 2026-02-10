@@ -155,113 +155,109 @@ const EEGDataReader: React.FC = () => {
 
   // Render Main Application (full-width, pre-16:9 layout)
   return (
-    <div className="app-container">
-      {showSettings && (
-        <SettingsScreen
-          settings={settings.settings}
-          onUpdateSetting={handleUpdateSetting}
-          onResetSettings={handleResetSettings}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
+    <div className="eeg-app-viewport">
+      <div className="app-container">
+        {showSettings && (
+          <SettingsScreen
+            settings={settings.settings}
+            onUpdateSetting={handleUpdateSetting}
+            onResetSettings={handleResetSettings}
+            onClose={() => setShowSettings(false)}
+          />
+        )}
 
-      <Header
-        username={auth.username}
-        mode={mode}
-        onModeChange={handleModeChange}
-        onShowSettings={() => setShowSettings(true)}
-        onLogout={handleLogout}
-      />
-
-      <main className="main-content">
-        <SessionPanel
+        <Header
+          username={auth.username}
           mode={mode}
-          sleepSessions={sleepData.sleepSessions}
-          selectedSession={sleepData.selectedSession}
-          sessionList={sleepData.sessionList}
-          isLoading={sleepData.isLoading}
-          isLoadingSessions={sleepData.isLoadingSessions}
-          onSelectSession={handleSelectSession}
-          onLoadSession={handleLoadSession}
-          onLoadDemoData={handleLoadDemoData}
-          onFetchSessionList={handleFetchSessionList}
-          onGenerateDemoSessionList={handleGenerateDemoSessionList}
-          onClearData={handleClearData}
+          onModeChange={handleModeChange}
+          onShowSettings={() => setShowSettings(true)}
+          onLogout={handleLogout}
         />
 
-        <SleepStatsPanel
-          sleepStats={sleepStats}
-          settings={settings.settings}
-        />
+        <main className="main-content">
+          <div className="dashboard-grid">
+            <section className="dashboard-left">
+              <SessionPanel
+                mode={mode}
+                sleepSessions={sleepData.sleepSessions}
+                selectedSession={sleepData.selectedSession}
+                sessionList={sleepData.sessionList}
+                isLoading={sleepData.isLoading}
+                isLoadingSessions={sleepData.isLoadingSessions}
+                onSelectSession={handleSelectSession}
+                onLoadSession={handleLoadSession}
+                onLoadDemoData={handleLoadDemoData}
+                onFetchSessionList={handleFetchSessionList}
+                onGenerateDemoSessionList={handleGenerateDemoSessionList}
+                onClearData={handleClearData}
+              />
 
-        {sleepData.edfStreamState.edfPlotUrl && (
-          <div className="visualization-panel">
-            <div className="panel-header">
-              <h2>EDF File Analysis (Python Generated)</h2>
-            </div>
-            <div className="visualization-content">
-              <div style={{ backgroundColor: '#2d3748', borderRadius: '8px', padding: '1rem', textAlign: 'center' }}>
-                <img
-                  src={sleepData.edfStreamState.edfPlotUrl}
-                  alt="EEG Analysis"
-                  style={{ width: '100%', maxWidth: '1200px', height: 'auto', borderRadius: '8px' }}
-                />
-                <p style={{ color: '#cbd5e0', marginTop: '1rem', fontSize: '0.9rem' }}>
-                  Real-time EEG analysis from backend/sessions/SC4001E0-PSG.edf
-                  <br />
-                  Generated using matplotlib with power spectrum analysis
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+              <UpdatesLog
+                updates={updates.updates}
+                autoScroll={autoScroll}
+                onAutoScrollChange={setAutoScroll}
+                onClearUpdates={handleClearUpdates}
+              />
+            </section>
 
-        {sleepData.edfStreamState.isStreaming && (
-          <div className="visualization-panel">
-            <div className="panel-header">
-              <h2>🔴 LIVE EDF Stream - 100Hz</h2>
-            </div>
-            <div className="visualization-content" style={{ padding: '1rem' }}>
-              <div style={{ backgroundColor: '#234e52', borderRadius: '8px', padding: '1.5rem', border: '2px solid #38b2ac' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  <span style={{ width: 12, height: 12, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
-                  <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>Real-Time Data Streaming Active</span>
+            <section className="dashboard-center">
+              {sleepData.edfStreamState.plotError && (
+                <div className="visualization-panel">
+                  <div className="panel-header">
+                    <h2>Stream Status</h2>
+                  </div>
+                  <div className="visualization-content">
+                    <div className="error-message">{sleepData.edfStreamState.plotError}</div>
+                  </div>
                 </div>
-                <div style={{ color: '#b2f5ea', fontSize: '0.95rem', lineHeight: '1.8' }}>
-                  <p style={{ margin: '0.5rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
-                  <p style={{ margin: '0.5rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
-                  <p style={{ margin: '0.5rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
-                  <p style={{ margin: '0.5rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
+              )}
+
+              {sleepData.edfStreamState.isStreaming && (
+                <div className="visualization-panel">
+                  <div className="panel-header">
+                    <h2>🔴 LIVE EDF Stream - 100Hz</h2>
+                  </div>
+                  <div className="visualization-content" style={{ padding: '1rem' }}>
+                    <div style={{ backgroundColor: '#234e52', borderRadius: '8px', padding: '1.5rem', border: '2px solid #38b2ac' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                        <span style={{ width: 12, height: 12, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
+                        <span style={{ color: '#e6fffa', fontSize: '1.1rem', fontWeight: 'bold' }}>Real-Time Data Streaming Active</span>
+                      </div>
+                      <div style={{ color: '#b2f5ea', fontSize: '0.95rem', lineHeight: '1.8' }}>
+                        <p style={{ margin: '0.5rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
+                        <p style={{ margin: '0.5rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
+                        <p style={{ margin: '0.5rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
+                        <p style={{ margin: '0.5rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+
+              <VisualizationPanel
+                selectedSession={sleepData.selectedSession}
+                settings={settings.settings}
+                edfStreamState={sleepData.edfStreamState}
+                getSleepStageAtTime={sleepData.getSleepStageAtTime}
+                selectedChannel={selectedChannel}
+                showRawData={showRawData}
+                timeView={timeView}
+                selectedSleepStage={selectedSleepStage}
+                onShowRawDataChange={setShowRawData}
+                onTimeViewChange={setTimeView}
+                onSelectedSleepStageChange={setSelectedSleepStage}
+                getChartData={getChartData}
+              />
+            </section>
+
+            <section className="dashboard-right">
+              <SleepStatsPanel sleepStats={sleepStats} settings={settings.settings} />
+            </section>
           </div>
-        )}
+        </main>
 
-        <VisualizationPanel
-          selectedSession={sleepData.selectedSession}
-          settings={settings.settings}
-          edfStreamState={sleepData.edfStreamState}
-          getSleepStageAtTime={sleepData.getSleepStageAtTime}
-          selectedChannel={selectedChannel}
-          showRawData={showRawData}
-          timeView={timeView}
-          selectedSleepStage={selectedSleepStage}
-          onShowRawDataChange={setShowRawData}
-          onTimeViewChange={setTimeView}
-          onSelectedSleepStageChange={setSelectedSleepStage}
-          getChartData={getChartData}
-        />
-
-        <UpdatesLog
-          updates={updates.updates}
-          autoScroll={autoScroll}
-          onAutoScrollChange={setAutoScroll}
-          onClearUpdates={handleClearUpdates}
-        />
-      </main>
-
-      <Footer mode={mode} />
+        <Footer mode={mode} />
+      </div>
     </div>
   );
 };

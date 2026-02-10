@@ -22,9 +22,10 @@
 
 /* 16:9 viewport wrapper – login screen only */
 .eeg-app-viewport {
-  aspect-ratio: 16 / 9;
-  width: min(100vw, calc(100vh * 16 / 9));
-  height: min(100vh, calc(100vw * 9 / 16));
+  /* Slightly taller than 16:9 to reduce the need for scrolling */
+  aspect-ratio: 16 / 10;
+  width: min(100vw, calc(100vh * 16 / 10));
+  height: min(100vh, calc(100vw * 10 / 16));
   max-width: 100%;
   max-height: 100%;
   position: fixed;
@@ -39,25 +40,208 @@
 
 /* Apply theme variables */
 .app-container {
-  background: var(--bg-primary);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 35%, #312e81 70%, #4c1d95 100%);
   color: var(--text-primary);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .main-content {
+  flex: 1;
+  min-height: 0;
+  padding: 0.75rem 1rem 0.75rem 1rem;
+  overflow: hidden;
+}
+
+.dashboard-grid {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) 1fr minmax(280px, 360px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.dashboard-left,
+.dashboard-center,
+.dashboard-right {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1rem;
-  overflow: auto;
 }
 
-.app-header,
+/* Let the activity log use leftover height in the sidebar */
+.dashboard-left .updates-panel {
+  flex: 1;
+  min-height: 260px;
+  max-height: calc(100% - 1rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Center column can get wide; prevent overflow forcing columns */
+.dashboard-center .visualization-panel {
+  min-width: 0;
+}
+
+@media (max-width: 1200px) {
+  .dashboard-grid {
+    grid-template-columns: minmax(280px, 340px) 1fr;
+  }
+
+  .dashboard-right {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+}
+
+/* Header layout & “card” feel */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.5rem;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  box-shadow:
+    0 18px 30px -18px rgba(0, 0, 0, 0.9),
+    0 0 0 1px rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(10px);
+}
+
+.header-left h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: #e5e7eb;
+}
+
+.header-left .user-info {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.6);
+}
+
+.mode-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 500;
+}
+
+.mode-label.active {
+  color: #e5e7eb;
+}
+
+/* iOS-style toggle */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #4b5563;
+  transition: 0.2s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+input:checked + .slider {
+  background-color: #6366f1;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #6366f1;
+}
+
+input:checked + .slider:before {
+  transform: translateX(18px);
+}
+
+.slider.round {
+  border-radius: 999px;
+}
+
+.slider.round:before {
+  border-radius: 999px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
 .connection-panel,
 .stats-panel,
 .visualization-panel,
 .updates-panel {
-  background: var(--bg-secondary);
-  border-color: var(--border-color);
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 18px;
+  box-shadow:
+    0 18px 30px -18px rgba(0, 0, 0, 1),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  color: #e5e7eb;
 }
 
 /* Settings Screen */
@@ -609,7 +793,7 @@
 .stats-panel,
 .visualization-panel,
 .updates-panel {
-  border-color: var(--border-color);
+  border-color: rgba(148, 163, 184, 0.5);
 }
 
 .input-group input {
@@ -644,8 +828,11 @@ table td {
 }
 
 .updates-log {
-  background: var(--bg-primary);
-  border-color: var(--border-color);
+  background: transparent;
+  border-color: transparent;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .update-entry {
@@ -826,11 +1013,14 @@ table td {
 
 /* Session Panel */
 .session-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.75rem;
+  box-shadow:
+    0 18px 30px -18px rgba(0, 0, 0, 1),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
 }
 
 .session-controls {
@@ -934,11 +1124,14 @@ table td {
 
 /* Sleep Stats Panel */
 .sleep-stats-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  border-radius: 18px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.75rem;
+  box-shadow:
+    0 18px 30px -18px rgba(0, 0, 0, 1),
+    0 0 0 1px rgba(15, 23, 42, 0.9);
 }
 
 .sleep-stats-panel .stats-grid {
