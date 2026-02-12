@@ -1,3 +1,15 @@
+/*
+
+Notes:
+-When paired all communications will be encrypted so when device parameters are tightened plaintext messenger will be
+ indistinguishable from ciphertext messenger
+
+TODO:
+-Cut down on the includes to improve compile time and move these probably to the .cpp file as its implementation other classes
+ don't need it
+
+*/
+
 #ifndef CONNECTIONMANAGER_H
 #define CONNECTIONMANAGER_H
 
@@ -9,6 +21,7 @@
 //Windows collections interfaces/helpers/iterables/etc
 #include <Windows.h>
 #include <winrt/Windows.Foundation.h>
+#include <Windows.Devices.Enumeration.h>
 #include <winrt/Windows.System.Profile.h>
 #include <winrt/Windows.Storage.Streams.h>
 #include <winrt/Windows.Devices.Enumeration.h>
@@ -20,30 +33,31 @@
 #include <string_view>
 #include <map>
 #include <memory>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 
 //-------------------------------------------------------------------------------------------------------------
 
 //Struct for handling GUID/UUID creation/manipulation/processing/etc
-struct guid{
+struct my_guid{
 
     uint32_t Data1;
     uint16_t Data2;
     uint16_t Data3;
     uint8_t Data4[8];
 
-    guid() noexcept = default;
+    my_guid() noexcept = default;
 
-    constexpr guid(uint32_t const Data1, uint16_t const Data2, uint16_t const Data3, std::array<uint8_t, 8> const& Data4) noexcept
+    constexpr my_guid(uint32_t const Data1, uint16_t const Data2, uint16_t const Data3, std::array<uint8_t, 8> const& Data4) noexcept
         : Data1(Data1), Data2(Data2), Data3(Data3){
             for(int i = 0; i < 8; i++) this->Data4[i] = Data4[i];
         };
-    constexpr guid(guid const& other) noexcept
+    constexpr my_guid(my_guid const& other) noexcept
             : Data1(other.Data1), Data2(other.Data2), Data3(other.Data3){
             for(int i = 0; i < 8; i++) this->Data4[i] = other.Data4[i];
         };
-    constexpr guid(std::string_view const& value) noexcept{
+    constexpr my_guid(std::string_view const& value) noexcept{
 
         //Not proper format
         if(value.size() != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-'){
@@ -89,7 +103,7 @@ struct guid{
     }
 
     //Evalutate at compile time
-    constexpr bool operator==(guid const& other) noexcept{
+    constexpr bool operator==(my_guid const& other) noexcept{
 
         return Data1 == other.Data1 &&
             Data2 == other.Data2 &&
@@ -105,7 +119,7 @@ struct guid{
 
     };
 
-    constexpr bool operator!=(guid const& other) noexcept{
+    constexpr bool operator!=(my_guid const& other) noexcept{
 
         return !(Data1 == other.Data1 &&
             Data2 == other.Data2 &&
@@ -121,7 +135,7 @@ struct guid{
 
     };
 
-    constexpr bool operator<(guid const& other) noexcept{
+    constexpr bool operator<(my_guid const& other) noexcept{
 
         if(Data1 != other.Data1) return Data1 < other.Data1;
         if(Data2 != other.Data2) return Data2 < other.Data2;
@@ -154,6 +168,18 @@ struct guid{
 
 };
 
+struct GattCharHash{
+    size_t operator()(const std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>& c) const{
+        return std::hash<uint64_t>()(c->Service().Device().BluetoothAddress()) ^ std::hash<winrt::guid>()(c->Uuid());
+    }
+};
+
+struct GattCharEqual{
+    bool operator()(const std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>& a, const std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>& b) const{
+        return a->Service().Device().BluetoothAddress() == b->Service().Device().BluetoothAddress() && a->Uuid() == b->Uuid();
+    }
+};
+
 class ConnectionManager{
 
     public:
@@ -172,7 +198,8 @@ class ConnectionManager{
         void connectToDeviceWithName();
 
         void subscribeToChar(winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic> characteristic);
-        void sendMessage(uint64_t deviceAddress, const std::string& message);
+        void read(uint64_t deviceAddress);
+        void sendPlainMessage(uint64_t deviceAddress, const std::string& message);
 
         //Helper functions
         void getFoundDeviceList();
@@ -197,7 +224,7 @@ class ConnectionManager{
         //For connecting and discovery
         void didDiscoverDevice(winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher, winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs args);
         void didCancelScanning();
-        void didConnect(winrt::Windows::Devices::Bluetooth::BluetoothLEDevice& device);
+        void didConnect(winrt::Windows::Devices::Bluetooth::BluetoothLEDevice const& device);
         void didDisconnect();
         void didFailToConnect();
 
@@ -224,15 +251,15 @@ class ConnectionManager{
         std::vector<uint64_t> discoveredDeviceUUIDS;
         std::vector<winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs> discoveredDevices;
 
-        std::vector<guid> acceptedServiceUUIDS = {
+        std::vector<my_guid> acceptedServiceUUIDS = {
 
-            guid("0000180F-0000-1000-8000-00805F9B34FB") //battery service
+            my_guid("0000180F-0000-1000-8000-00805F9B34FB") //battery service
 
         };
 
-        std::vector<guid> acceptedCharacteristicUUIDs = {
+        std::vector<my_guid> acceptedCharacteristicUUIDs = {
 
-            guid("00002A19-0000-1000-8000-00805F9B34FB") //battery level characteristic (part of battery service)
+            my_guid("00002A19-0000-1000-8000-00805F9B34FB") //battery level characteristic (part of battery service)
 
         };
 
@@ -243,7 +270,8 @@ class ConnectionManager{
 
         winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher;
         //Have as a map to handle multiple characteristics of same type
-        std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> subscribedWriteCharacteristics;
+        std::unordered_map<uint64_t, std::unordered_set<std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>, GattCharHash, GattCharEqual>> subscribedWriteCharacteristics;
+        std::unordered_map<uint64_t, std::unordered_set<std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>, GattCharHash, GattCharEqual>> subscribedReadCharacteristics;
         std::unordered_map<uint64_t, std::unordered_set<winrt::guid>> subscribedNotifyCharacteristics;
         bool connecting = false;
    

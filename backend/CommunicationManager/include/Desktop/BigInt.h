@@ -25,6 +25,7 @@ TODO:
 -Need to change shift operations to work in constant time
 -Maybe add in place shifting logic for left and right shift
 -May need to tweak parameters for consistency sake
+-Finish up deconstructor
 
 */
 
@@ -70,6 +71,76 @@ class BigInt{
         BigInt(const BigInt&) = default; //have this reinforced in order to implement deconstructor
         ~BigInt(){};
 
+//Normal operations
+//-----------------------------------------------------------------------------------------------------------------
+
+        //If overflows will return a carry uint64_t
+        static uint64_t add(BigInt<LIMBS>& res, const BigInt<LIMBS>& a, const BigInt<LIMBS>& b){
+            uint64_t carry = 0;
+
+            //Normal add
+            for(size_t i = 0; i < LIMBS; i++){
+                uint64_t sum = a.data[i] + b.data[i] + carry;
+                carry = (sum < a.data[i] || (carry && sum == a.data[i]) ? 1 : 0);
+                res.data[i] = sum;
+            }
+
+            return carry;
+
+        };
+
+        //res can only be assigned to a and the function still be safe res != b or res != n will fail ex sub_mod(x, x, y, y) vs bad: sub(x, y,->x, y)
+        static void sub(BigInt<LIMBS>& res, const BigInt<LIMBS>& a, const BigInt<LIMBS>& b){
+            uint64_t borrow = 0;
+
+            //Normal subtract
+            for(size_t i = 0; i < LIMBS; i++){
+                uint64_t temp = a.data[i] - b.data[i] - borrow;
+                borrow = (a.data[i] < b.data[i] + borrow) ? 1 : 0;
+                res.data[i] = temp;
+            }
+
+        };
+
+        //Will write a quotient and remainder does not do floating point
+        static void divide(const BigInt<LIMBS>& a, const BigInt<LIMBS>& b, BigInt<LIMBS>& q, BigInt<LIMBS>& r){
+
+            q.zero();
+            r.zero();
+
+            for (int i = 63 * LIMBS - 1; i >= 0; --i){ // iterate over all bits
+                leftShift(r, r, 1);                  // multiply r by 2
+                r.setBit(0, a.getBit(i));      // add current bit of a
+
+                if (isGreaterThan(r, b) | equals(r, b)){
+                    sub(r, r, b);
+                    q.setBit(i, 1);
+                }
+            }
+        };
+
+        static void mul(const BigInt<LIMBS>& a, const BigInt<LIMBS>& b, BigInt<2*LIMBS>& res){
+            res.zero();
+
+            for(size_t i = 0; i < LIMBS; i++){
+                uint64_t carry = 0;
+                for(size_t j = 0; j < LIMBS; j++){
+                    uint64_t low, high;
+                    mul64(a.data[i], b.data[j], low, high);
+
+                    uint64_t sum1 = res.data[i+j] + low;
+                    uint64_t c1 = (sum1 < low);
+
+                    uint64_t sum2 = sum1 + carry;
+                    uint64_t c2 = (sum2 < sum1);
+
+                    res.data[i+j] = sum2;
+                    carry = high + c1 + c2;
+                }
+                res.data[i + LIMBS] = carry;
+            }
+
+        };
 
 //Signed operations (TODO: May need to delete these may not be needed)
 //-----------------------------------------------------------------------------------------------------------------
@@ -151,77 +222,6 @@ class BigInt{
             }
             if(r.isZero()){
                 r.negative = false;
-            }
-
-        };
-
-//Normal operations
-//-----------------------------------------------------------------------------------------------------------------
-
-        //If overflows will return a carry uint64_t
-        static uint64_t add(BigInt<LIMBS>& res, const BigInt<LIMBS>& a, const BigInt<LIMBS>& b){
-            uint64_t carry = 0;
-
-            //Normal add
-            for(size_t i = 0; i < LIMBS; i++){
-                uint64_t sum = a.data[i] + b.data[i] + carry;
-                carry = (sum < a.data[i] || (carry && sum == a.data[i]) ? 1 : 0);
-                res.data[i] = sum;
-            }
-
-            return carry;
-
-        };
-
-        //res can only be assigned to a and the function still be safe res != b or res != n will fail ex sub_mod(x, x, y, y) vs bad: sub(x, y,->x, y)
-        static void sub(BigInt<LIMBS>& res, const BigInt<LIMBS>& a, const BigInt<LIMBS>& b){
-            uint64_t borrow = 0;
-
-            //Normal subtract
-            for(size_t i = 0; i < LIMBS; i++){
-                uint64_t temp = a.data[i] - b.data[i] - borrow;
-                borrow = (a.data[i] < b.data[i] + borrow) ? 1 : 0;
-                res.data[i] = temp;
-            }
-
-        };
-
-        //Will write a quotient and remainder does not do floating point
-        static void divide(const BigInt<LIMBS>& a, const BigInt<LIMBS>& b, BigInt<LIMBS>& q, BigInt<LIMBS>& r){
-
-            q.zero();
-            r.zero();
-
-            for (int i = 63 * LIMBS - 1; i >= 0; --i){ // iterate over all bits
-                leftShift(r, r, 1);                  // multiply r by 2
-                r.setBit(0, a.getBit(i));      // add current bit of a
-
-                if (isGreaterThan(r, b) | equals(r, b)){
-                    sub(r, r, b);
-                    q.setBit(i, 1);
-                }
-            }
-        };
-
-        static void mul(const BigInt<LIMBS>& a, const BigInt<LIMBS>& b, BigInt<2*LIMBS>& res){
-            res.zero();
-
-            for(size_t i = 0; i < LIMBS; i++){
-                uint64_t carry = 0;
-                for(size_t j = 0; j < LIMBS; j++){
-                    uint64_t low, high;
-                    mul64(a.data[i], b.data[j], low, high);
-
-                    uint64_t sum1 = res.data[i+j] + low;
-                    uint64_t c1 = (sum1 < low);
-
-                    uint64_t sum2 = sum1 + carry;
-                    uint64_t c2 = (sum2 < sum1);
-
-                    res.data[i+j] = sum2;
-                    carry = high + c1 + c2;
-                }
-                res.data[i + LIMBS] = carry;
             }
 
         };
@@ -338,9 +338,9 @@ class BigInt{
         static void exp_mod(BigInt<LIMBS>& res, const BigInt<LIMBS>& base, const BigInt<LIMBS>& exp, const BigInt<LIMBS>& n){
 
             BigInt<LIMBS> r0, r1;
-            r0.setOne();
+            r0.one();
             r1 = base;
-            r1.mod(n);
+            mod(r1, n);
 
             for(int i = exp.bitLength() - 1; i >= 0; i--){
                 bool bit = exp.getBit(i);
@@ -359,6 +359,7 @@ class BigInt{
 
         };
 
+        //Uses Fermat's little theorem
         static void inv_mod(BigInt<LIMBS>& res, const BigInt<LIMBS>& a, const BigInt<LIMBS>& n){
 
             BigInt<LIMBS> exp(n);
@@ -731,13 +732,13 @@ class BigInt{
         };
 
         static uint64_t bitlen64(uint64_t w){
-            int n = 0
+            int n = 0;
             while(w){
                 w >>= 1;
                 n++;
             }
             return n;
-        }
+        };
 
         void setBit(size_t index, bool bit){
             size_t limb_index = index / 64;
