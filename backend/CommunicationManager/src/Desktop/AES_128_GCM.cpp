@@ -21,7 +21,7 @@ AES_128_GCM::~AES_128_GCM(){
     cout << "Deconstructing AES_128_GCM manager [NEEDS TO BE IMPLEMENTED]" << endl;
 };
 
-void AES_128_GCM::AES_128_GCM_Encrypt(uint8_t afflineTransformShiftAmount, const array<std::array<uint8_t, 4>, 4>& IV, const array<uint8_t, 16>& keyInitial, const array<uint8_t, 256>& Sbox, const array<uint8_t, 256>& Inv_Sbox, const array<uint8_t, 10>& Rcon){
+void AES_128_GCM::AES_128_GCM_Encrypt(const uint8_t key[16], const uint8_t nonce[12], const uint8_t Sbox[256], const uint8_t Inv_Sbox[256]){
     cout << "Encrypt function called [NEEDS TO BE IMPLEMENTED]" << endl;
 };
 
@@ -36,7 +36,7 @@ void AES_128_GCM::AES_128_GCM_Decrypt(){
 //-------------------------------------------------------------------------------------------------------------
 
 //Normal AES_128 encrypt
-void AES_128_GCM::encryptBlock(const uint8_t in[16], uint8_t out[16], const uint32_t roundKeys[44]){
+void AES_128_GCM::encryptBlock(const uint8_t in[16], uint8_t out[16], const uint32_t roundKeys[44], const uint8_t Sbox[256]){
     vector<vector<uint8_t>> state(4, vector<uint8_t>(4));
 
     for(int c = 0; c < 4; c++){
@@ -48,13 +48,13 @@ void AES_128_GCM::encryptBlock(const uint8_t in[16], uint8_t out[16], const uint
     addRoundKey(state, roundKeys, 0);
 
     for(int round = 1; round < 10; round++){
-        subBytes(state);
+        subBytes(state, Sbox);
         shiftRows(state);
         mixColumns(state);
         addRoundKey(state, roundKeys, round);
     }
 
-    subBytes(state);
+    subBytes(state, Sbox);
     shiftRows(state);
     addRoundKey(state, roundKeys, 10);
 
@@ -65,20 +65,20 @@ void AES_128_GCM::encryptBlock(const uint8_t in[16], uint8_t out[16], const uint
     }
 }
 
-void AES_128_GCM::generateHashSubkey(const uint32_t roundKeys[44], uint8_t H[16]){
+void AES_128_GCM::generateHashSubkey(const uint32_t roundKeys[44], uint8_t H[16], const uint8_t Sbox[256]){
     uint8_t zeroBlock[16] = {0};
 
-    encryptBlock(zeroBlock, H, roundKeys);
+    encryptBlock(zeroBlock, H, roundKeys, Sbox);
 
     for(int i = 0; i < 16; i++){
         H[i] = zeroBlock[i];
     }
 }
 
-void AES_128_GCM::ctrEncrypt(const uint8_t plaintext[16], uint8_t ciphertext[16], uint8_t counter[16], const uint32_t roundKeys[44]){
+void AES_128_GCM::ctrEncrypt(const uint8_t plaintext[16], uint8_t ciphertext[16], uint8_t counter[16], const uint32_t roundKeys[44], const uint8_t Sbox[256]){
     uint8_t keystream[16];
 
-    encryptBlock(counter, keystream, roundKeys);
+    encryptBlock(counter, keystream, roundKeys, Sbox);
 
     for(int i = 0; i < 16; i++){
         ciphertext[i] = plaintext[i] ^ keystream[i];
@@ -124,12 +124,12 @@ void AES_128_GCM::ghash(const uint8_t H[16], const uint8_t* A, size_t A_len, con
     memcpy(tag, X, 16);
 }
 
-void AES_128_GCM::computeTag(const uint8_t J0[16], const uint8_t H[16], const uint8_t* A, size_t A_len, const uint8_t* C, size_t C_len, const uint32_t roundKeys[44], uint8_t tag[16]){
+void AES_128_GCM::computeTag(const uint8_t J0[16], const uint8_t H[16], const uint8_t* A, size_t A_len, const uint8_t* C, size_t C_len, const uint32_t roundKeys[44], uint8_t tag[16], const uint8_t Sbox[256]){
     uint8_t ghashVal[16];
     ghash(H, A, A_len, C, C_len, ghashVal);
 
     uint8_t s[16];
-    encryptBlock(J0, s, roundKeys);
+    encryptBlock(J0, s, roundKeys, Sbox);
 
     for(int i = 0; i < 16; i++){
         tag[i] = ghashVal[i] ^ s[i];
@@ -145,29 +145,34 @@ void AES_128_GCM::incrementCounter(uint8_t counter[16]){
     }
 }
 
-//-------------------------------------------------------------------------------------------------------------
+//GCM Helper functions
+//-----------------------------------------------------------------------------------------------------------------
 
-void AES_128_GCM::SboxGenerator(){
-    for(int i = 0; i < 256; i++){
-        uint8_t inv = (i == 0) ? 0 : AES_128_GCM::gfMulInverse(i);
-        uint8_t sub = 0;
-        for(int j = 0; j < 8; j++){
-            uint8_t bit = ((inv >> j) & 1) ^
-                ((inv >> (j + 1) % 8) & 1) ^ 
-                ((inv >> (j + 2) % 8) & 1) ^ 
-                ((inv >> (j + 3) % 8) & 1) ^ 
-                ((inv >> (j + 4) % 8) & 1) ^
-                ((afflineTransformShiftAmount >> j) & 1);
-            sub |= (bit << j);
+void AES_128_GCM::gfMulArr(const uint8_t X[16], const uint8_t H[16], uint8_t out[16]){
+    uint8_t Z[16] = {0};
+    uint8_t V[16];
+
+    memcpy(V, H, 16);
+
+    for(int i = 0; i < 128; i++){
+        int bit = (X[i/8] >> (7 - (i % 8))) & 1;
+        if(bit){
+            for(int j = 0; j < 16; j++){
+                Z[j] ^= V[j];
+            }
         }
-        Sbox[i] = sub;
-    }
 
-    for(int i = 0; i < 256; i++){
-        uint8_t j = Sbox[i];
-        Inv_Sbox[j] = i;
+        bool lsb = V[15] & 1;
+        for(int j = 15; j > 0; j--){
+            V[j] = (V[j] >> 1) | ((V[j - 1] & 1) << 7);
+        }
+        V[0] >>= 1;
+        if(lsb){
+            V[0] ^= 0xE1;
+        }
     }
-};
+    memcpy(out, Z, 16);
+}
 
 //Key functions
 //-----------------------------------------------------------------------------------------------------------------
@@ -182,7 +187,7 @@ void AES_128_GCM::addRoundKey(vector<vector<uint8_t>>& state, const uint32_t rou
     }
 };
 
-void AES_128_GCM::keyExpansion(const uint8_t key[16], uint32_t roundKeys[44], int rounds, int length){
+void AES_128_GCM::keyExpansion(const uint8_t key[16], uint32_t roundKeys[44], const uint8_t Rcon[10], const uint8_t Sbox[256], int rounds, int length){
 
     int Nk = length/32;        //num words in key
     int Nr = rounds;            //num rounds
@@ -201,9 +206,9 @@ void AES_128_GCM::keyExpansion(const uint8_t key[16], uint32_t roundKeys[44], in
         uint32_t temp = roundKeys[i-1];
 
         if(i % Nk == 0){
-            temp = subWord(rotWord(temp)) ^ (static_cast<uint32_t>(Rcon[i/Nk - 1]) << 24);
+            temp = subWord(Sbox, rotWord(temp)) ^ (static_cast<uint32_t>(Rcon[i/Nk - 1]) << 24);
         }else if(Nk > 6 && i % Nk == 4){
-            temp = subWord(temp);
+            temp = subWord(Sbox, temp);
         }
 
         roundKeys[i] = roundKeys[i - Nk] ^ temp;
@@ -215,7 +220,7 @@ void AES_128_GCM::keyExpansion(const uint8_t key[16], uint32_t roundKeys[44], in
 //Text manipulation functions
 //-----------------------------------------------------------------------------------------------------------------
 
-void AES_128_GCM::subBytes(vector<vector<uint8_t>>& plaintext){
+void AES_128_GCM::subBytes(vector<vector<uint8_t>>& plaintext, const uint8_t Sbox[256]){
 
     for(int row = 0; row < plaintext.size(); row++){
         for(int col = 0; col < plaintext[row].size(); col++){
@@ -256,7 +261,7 @@ void AES_128_GCM::mixColumns(vector<vector<uint8_t>>& plaintext){
     }
 };
 
-void AES_128_GCM::invSubBytes(vector<vector<uint8_t>>& ciphertext){
+void AES_128_GCM::invSubBytes(vector<vector<uint8_t>>& ciphertext, const uint8_t Inv_Sbox[256]){
 
     for(int row = 0; row < 4; row++){
         for(int col = 0; col < 4; col++){
@@ -318,7 +323,7 @@ vector<uint8_t> AES_128_GCM::rightRotate(const vector<uint8_t>& row, int n) cons
 //Word manipulation
 //-----------------------------------------------------------------------------------------------------------------
 
-uint32_t AES_128_GCM::subWord(uint32_t word) const{
+uint32_t AES_128_GCM::subWord(const uint8_t Sbox[256], uint32_t word) const{
     uint8_t b0 = Sbox[(word >> 24) & 0xFF];
     uint8_t b1 = Sbox[(word >> 16) & 0xFF];
     uint8_t b2 = Sbox[(word >> 8) & 0xFF];
@@ -380,6 +385,9 @@ uint8_t AES_128_GCM::gfAdd(uint8_t l, uint8_t r){
     return sum;
 };
 
+//AES helper functions
+//-----------------------------------------------------------------------------------------------------------------
+
 int AES_128_GCM::degree(uint8_t x) const{
     if(x == 0){
         return -1;
@@ -390,29 +398,3 @@ int AES_128_GCM::degree(uint8_t x) const{
     }
     return deg;
 };
-
-void gfMulArr(const uint8_t X[16], const uint8_t H[16], uint8_t out[16]){
-    uint8_t Z[16] = {0};
-    uint8_t V[16];
-
-    memcpy(V, H, 16);
-
-    for(int i = 0; i < 128; i++){
-        int bit = (X[i/8] >> (7 - (i % 8))) & 1;
-        if(bit){
-            for(int j = 0; j < 16; j++){
-                Z[j] ^= V[j];
-            }
-        }
-
-        bool lsb = V[15] & 1;
-        for(int j = 15; j > 0; j--){
-            V[j] = (V[j] >> 1) | ((V[j - 1] & 1) << 7);
-        }
-        V[0] >>= 1;
-        if(lsb){
-            V[0] ^= 0xE1;
-        }
-    }
-    memcpy(out, Z, 16);
-}

@@ -6,14 +6,9 @@ NOTE USING UNORDERED_SET OF SEEN DEVICES TO SPEED OF RECONNECTION IN CASE OF DIS
 
 TODO:
 -IMPLEMENT DECONSTRUCTOR
--ADD MUTEXES FOR ACCESS STUFF DURING ASYNC CALL
--make a seenDevices stores Bluetooth addresses which can change if this ever needs to be completely secure it should kill inactive
- connections and drop seen devices it doesn't keep seeing?
 -Properly handle client disconnection
--Add ability to stop broadcasting only way to currently stop is by quitting after initially starting
--Add ability for when ceasing broadcast to be able to swap to being a client and connect to others
--Add also checking UUIDs instead of just checking matching properties
--Add ability to sort through cycle and remove from seenDevices to manage it
+-Add better logic for dealing with device properties to connect to the write one and proper characteristic checking
+ don't just use user decription when checking
 */
 
 //Bluetooth naming
@@ -35,6 +30,7 @@ using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattReadResul
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicProperties;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristicsResult;
+using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattProtectionLevel;
 
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCommunicationStatus;
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattClientCharacteristicConfigurationDescriptorValue;
@@ -45,9 +41,12 @@ using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceSer
 
 using winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattWriteOption;
 
+using winrt::Windows::Devices::Enumeration::DevicePairingResultStatus;
+using winrt::Windows::Devices::Enumeration::DevicePairingProtectionLevel;
+using winrt::Windows::Devices::Enumeration::DevicePairingResult;
+
 //Async
 using winrt::Windows::Foundation::IAsyncOperation;
-using winrt::Windows::Foundation::AsyncStatus;
 
 //Helpers
 using winrt::Windows::Storage::Streams::DataWriter;
@@ -114,14 +113,13 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
     for(auto characteristic : characteristics){
         auto properties = characteristic.CharacteristicProperties();
         auto characteristicPtr = make_shared<GattCharacteristic>(characteristic);
+        auto addr = characteristic.Service().Device().BluetoothAddress();
+        auto charUuid = characteristic.Uuid();
 
-        //Handling for if its a notify characteristic from a service
+        //Handling for if it's a notify characteristic from a service
         if(static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Notify)){
 
             cout << "Found notify characteristic" << endl;
-
-            auto addr = characteristic.Service().Device().BluetoothAddress();
-            auto charUuid = characteristic.Uuid();
 
             if(subscribedNotifyCharacteristics[addr].find(charUuid) == subscribedNotifyCharacteristics[addr].end()){
 
@@ -129,9 +127,9 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
 
                 characteristicPtr->WriteClientCharacteristicConfigurationDescriptorAsync(
                     GattClientCharacteristicConfigurationDescriptorValue::Notify
-                ).Completed([this, characteristicPtr](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
+                ).Completed([this, characteristicPtr](IAsyncOperation<GattCommunicationStatus> op, winrt::Windows::Foundation::AsyncStatus status){
 
-                    if(status == AsyncStatus::Completed){
+                    if(status == winrt::Windows::Foundation::AsyncStatus::Completed){
                         characteristicPtr->ValueChanged([this](GattCharacteristic sender, GattValueChangedEventArgs args){
 
                             this->didReadValueForCharacteristic(args.CharacteristicValue(), GattCommunicationStatus::Success);
@@ -145,50 +143,109 @@ void ConnectionManager::subscribeToChar(IVectorView<GattCharacteristic> characte
 
         }
 
-        //Handling for if its a write characteristic from a service
+        //Handling for if it's a write characteristic from a service
         if((static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Write)) ||
            (static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::WriteWithoutResponse))){
+            cout << "Found write characteristic [NEED TO IMPLEMENT DISTINCTION BETWEEN CIPHER AND PLAINTEXT]" << endl;
 
-            cout << "Found write characteristic" << endl;
-
-            subscribedWriteCharacteristics[characteristic.Service().Device().BluetoothAddress()] = characteristicPtr;
+            auto& charSet = subscribedWriteCharacteristics[addr];
+            charSet.insert(characteristicPtr);
 
         }
 
-    }
-};
+        //Handling for if it's a read characteristic from a service
+        if(static_cast<unsigned int>(properties) & static_cast<unsigned int>(GattCharacteristicProperties::Read)){
+            cout << "Found read characteristic" << endl;
 
-void ConnectionManager::sendMessage(uint64_t deviceAddress, const string& message){
-    auto ch = subscribedWriteCharacteristics.find(deviceAddress);
-    if(ch == subscribedWriteCharacteristics.end()){
-        cout << "No write characteristics have been stored for device: " << BluetoothAddressToString(deviceAddress) << endl;
+            auto& charSet = subscribedReadCharacteristics[addr];
+            charSet.insert(characteristicPtr);
+        }
+    }
+}
+
+void ConnectionManager::read(uint64_t deviceAddress){
+    auto ch = subscribedReadCharacteristics.find(deviceAddress);
+    if(ch == subscribedReadCharacteristics.end()){
+        cout << "No read characteristic stored for device: " << BluetoothAddressToString(deviceAddress) << endl;
         return;
     }
 
-    auto& characteristic = ch->second; //get actual value stored at index
-    if(!characteristic){
-        cout << "Write characteristic pointer is null" << endl;
+    auto& characteristics = ch->second;
+    if(characteristics.empty()){
+        cout << "No read characteristic stored for device: " << BluetoothAddressToString(deviceAddress) << endl;
+        return;
     }
 
-    DataWriter writer;
-    writer.WriteBytes(vector<uint8_t>(message.begin(), message.end()));
-    auto buffer = writer.DetachBuffer();
-
-    characteristic->WriteValueAsync(buffer, GattWriteOption::WriteWithoutResponse).Completed(
-        [message](IAsyncOperation<GattCommunicationStatus> op, AsyncStatus status){
-    
-            if(status == AsyncStatus::Completed){
-                auto result = op.GetResults();
-                if(result == GattCommunicationStatus::Success){
-                    cout << "Message: " << message << ", was sent successfully" << endl;
-                }else{
-                    cout << "Message: " << message << ", failed to send(GattCommunication)" << endl;
-                }
-            }else{
-                cout << "Message: " << message << ", failed to send(AsyncStatus)" << endl;
+    for(auto& characteristic : characteristics){
+        characteristic->ReadValueAsync().Completed([](IAsyncOperation<GattReadResult> op, winrt::Windows::Foundation::AsyncStatus status){
+            if(status != winrt::Windows::Foundation::AsyncStatus::Completed){
+                cout << "Read failed (AsyncStatus)" << endl;
+                return;
             }
-    
-    });
+
+            auto result = op.GetResults();
+            if(result.Status() != GattCommunicationStatus::Success){
+                cout << "Read failed (GattCommunication)" << endl;
+                return;
+            }
+
+            DataReader reader = DataReader::FromBuffer(result.Value());
+            vector<uint8_t> data(reader.UnconsumedBufferLength());
+            reader.ReadBytes(data);
+
+            string message(data.begin(), data.end());
+            cout << "Read message: " << message << endl;
+
+        });
+    }
+
+}
+
+void ConnectionManager::sendPlainMessage(uint64_t deviceAddress, const string& message){
+    auto ch = subscribedWriteCharacteristics.find(deviceAddress);
+    if(ch == subscribedWriteCharacteristics.end()){
+        cout << "No write characteristics have been stored for device (1): " << BluetoothAddressToString(deviceAddress) << endl;
+        return;
+    }
+
+    auto& characteristics = ch->second;
+    if(characteristics.empty()){
+        cout << "No write characteristics have been stored for device (2): " << BluetoothAddressToString(deviceAddress) << endl;
+        return;
+    }
+
+    for(auto& characteristic : characteristics){
+
+        if(!characteristic){
+            continue;
+        }
+
+        auto description = characteristic->UserDescription();
+        if(description != L"Plaintext Messenger"){
+            continue;
+        }
+
+        DataWriter writer;
+        writer.WriteBytes(vector<uint8_t>(message.begin(), message.end()));
+        auto buffer = writer.DetachBuffer();
+
+        characteristic->WriteValueAsync(buffer, GattWriteOption::WriteWithoutResponse).Completed(
+            [message](IAsyncOperation<GattCommunicationStatus> op, winrt::Windows::Foundation::AsyncStatus status){
+        
+                if(status == winrt::Windows::Foundation::AsyncStatus::Completed){
+                    auto result = op.GetResults();
+                    if(result == GattCommunicationStatus::Success){
+                        cout << "Message: " << message << ", was sent successfully" << endl;
+                    }else{
+                        cout << "Message: " << message << ", failed to send(GattCommunication)" << endl;
+                    }
+                }else{
+                    cout << "Message: " << message << ", failed to send(AsyncStatus)" << endl;
+                }
+        
+        });
+
+    }
 
 }
 
@@ -271,35 +328,80 @@ uint64_t ConnectionManager::stringToBluetoothAddress(const string& address){
 //Private
 
 void ConnectionManager::connectPeripheral(uint64_t windowsDeviceAddress){
-    BluetoothLEDevice::FromBluetoothAddressAsync(windowsDeviceAddress).Completed([this](IAsyncOperation<BluetoothLEDevice> sender, AsyncStatus status){
+    BluetoothLEDevice::FromBluetoothAddressAsync(windowsDeviceAddress).Completed([this](IAsyncOperation<BluetoothLEDevice> sender, winrt::Windows::Foundation::AsyncStatus status){
         auto device = sender.GetResults();
-        if(device){
-            switch(status){
-                case AsyncStatus::Completed:
-                    this->didConnect(device);
-                    break;
-                case AsyncStatus::Canceled:
-                case AsyncStatus::Error:
-                case AsyncStatus::Started:
-                    this->didFailToConnect();
-            }
-        }else{
-            cout << "Device is Null: " << sender.ErrorCode() << endl;
+        if(!device){
+            cout << "Device is null" << sender.ErrorCode() << endl;
+            this->didFailToConnect();
+            return;
         }
+        
+        if(status != winrt::Windows::Foundation::AsyncStatus::Completed){
+            this->didFailToConnect();
+            return;
+        }
+
+        auto pairing = device.DeviceInformation().Pairing();
+
+        if(!pairing.IsPaired()){
+            pairing.PairAsync(DevicePairingProtectionLevel::Encryption).Completed([this, device](IAsyncOperation<DevicePairingResult> op, winrt::Windows::Foundation::AsyncStatus status){
+
+                auto pairResult = op.GetResults();
+                switch(pairResult.Status()){
+                    case DevicePairingResultStatus::Paired:
+                    case DevicePairingResultStatus::AlreadyPaired:
+                        this->didConnect(device);
+                        break;
+                    case DevicePairingResultStatus::NotReadyToPair:
+                        cout << "Pairing failed: device not ready to pair" << endl;
+                        this->didFailToConnect();
+                        break;
+                    case DevicePairingResultStatus::NotPaired:
+                        cout << "Pairing failed: device rejected pairing" << endl;
+                        this->didFailToConnect();
+                        break;
+                    case DevicePairingResultStatus::InvalidCeremonyData:
+                        cout << "Pairing failed: invalid ceremony data" << endl;
+                        this->didFailToConnect();
+                        break;
+                    case DevicePairingResultStatus::OperationAlreadyInProgress:
+                        cout << "Pairing failed: operation already in progress" << endl;
+                        this->didFailToConnect();
+                        break;
+                    case DevicePairingResultStatus::Failed:
+                        cout << "Pairing failed: generic failure" << endl;
+                        this->didFailToConnect();
+                        break;
+                    case DevicePairingResultStatus::ProtectionLevelCouldNotBeMet:
+                        cout << "Pairing failed: required encryption/authentication not supported" << endl;
+                        this->didFailToConnect();
+                        break;
+                    default:
+                        cout << "Pairing failed: unknown status " << static_cast<unsigned int>(pairResult.Status()) << endl;
+                        this->didFailToConnect();
+                        break;
+                        
+                }
+
+            });
+        }else{
+            this->didConnect(device);
+        }
+
     });
 };
 
 void ConnectionManager::discoverServices(BluetoothLEDevice device){
-    device.GetGattServicesAsync().Completed([this](IAsyncOperation<GattDeviceServicesResult> sender, AsyncStatus status){
+    device.GetGattServicesAsync().Completed([this](IAsyncOperation<GattDeviceServicesResult> sender, winrt::Windows::Foundation::AsyncStatus status){
         GattDeviceServicesResult result = sender.get();
         if(result){
             switch(status){
-                case AsyncStatus::Completed:
+                case winrt::Windows::Foundation::AsyncStatus::Completed:
                     this->didDiscoverServices(result.Services(), result.Status());
                     break;
-                case AsyncStatus::Canceled:
-                case AsyncStatus::Error:
-                case AsyncStatus::Started:
+                case winrt::Windows::Foundation::AsyncStatus::Canceled:
+                case winrt::Windows::Foundation::AsyncStatus::Error:
+                case winrt::Windows::Foundation::AsyncStatus::Started:
                     this->didFailToDiscoverServices();
             }
         }else{
@@ -309,17 +411,17 @@ void ConnectionManager::discoverServices(BluetoothLEDevice device){
 };
 
 void ConnectionManager::discoverCharacteristicsForService(GattDeviceService service){
-    service.GetCharacteristicsAsync().Completed([this](IAsyncOperation<GattCharacteristicsResult> sender, AsyncStatus status){
+    service.GetCharacteristicsAsync().Completed([this](IAsyncOperation<GattCharacteristicsResult> sender, winrt::Windows::Foundation::AsyncStatus status){
 
         GattCharacteristicsResult result = sender.get();
         if(result){
             switch(status){
-                case AsyncStatus::Completed:
+                case winrt::Windows::Foundation::AsyncStatus::Completed:
                     this->didDiscoverCharacteristicsForService(result.Characteristics(), result.Status());
                     break;
-                case AsyncStatus::Canceled:
-                case AsyncStatus::Error:
-                case AsyncStatus::Started:
+                case winrt::Windows::Foundation::AsyncStatus::Canceled:
+                case winrt::Windows::Foundation::AsyncStatus::Error:
+                case winrt::Windows::Foundation::AsyncStatus::Started:
                     this->didFailToDiscoverCharacteristicsForService();
             }
         }else{
@@ -330,16 +432,32 @@ void ConnectionManager::discoverCharacteristicsForService(GattDeviceService serv
 };
 
 void ConnectionManager::readValueForCharacteristic(GattCharacteristic characteristic){
-    characteristic.ReadValueAsync().Completed([this](IAsyncOperation<GattReadResult> sender, AsyncStatus status){
+    auto protectionLevel = characteristic.ProtectionLevel();
+
+    switch(protectionLevel){
+        case GattProtectionLevel::Plain:
+            cout << "Plaintext characteristic" << endl;
+            break;
+
+        case GattProtectionLevel::EncryptionRequired:
+            cout << "Ciphertext characteristic" << endl;
+            break;
+
+        case GattProtectionLevel::EncryptionAndAuthenticationRequired:
+            cout << "Ciphertext characteristic with authentication" << endl;
+            break;
+    }
+
+    characteristic.ReadValueAsync().Completed([this](IAsyncOperation<GattReadResult> sender, winrt::Windows::Foundation::AsyncStatus status){
         GattReadResult result = sender.get();
         if(result){
             switch(status){
-                case AsyncStatus::Completed:
+                case winrt::Windows::Foundation::AsyncStatus::Completed:
                     this->didReadValueForCharacteristic(result.Value(), result.Status());
                     break;
-                case AsyncStatus::Canceled:
-                case AsyncStatus::Error:
-                case AsyncStatus::Started:
+                case winrt::Windows::Foundation::AsyncStatus::Canceled:
+                case winrt::Windows::Foundation::AsyncStatus::Error:
+                case winrt::Windows::Foundation::AsyncStatus::Started:
                     this->didFailToReadValueForCharacteristic();
             }
         }else{
@@ -375,7 +493,7 @@ void ConnectionManager::didCancelScanning(){
     cout << "stopped scanning" << endl;
 };
 
-void ConnectionManager::didConnect(BluetoothLEDevice& device){
+void ConnectionManager::didConnect(BluetoothLEDevice const& device){
     connecting = false;
     cout << "didConnectPeripheral: " << to_string(device.Name().c_str()) << endl;
     discoverServices(device);
@@ -510,6 +628,9 @@ void ConnectionManager::printCharacteristicDescription(const GattCharacteristic&
 };
 
 void ConnectionManager::printDeviceDescription(const BluetoothLEAdvertisementReceivedEventArgs& device){
+
+    cout << "NEED TO IMPROVE INITIAL ADVERTISEMENT PACKET CHECK" << endl;
+
     BluetoothLEAdvertisement deviceAd = device.Advertisement();
     cout << "Device name: " << to_string(deviceAd.LocalName().c_str()) << endl;
 
@@ -573,7 +694,9 @@ bool ConnectionManager::shouldConnectToDevice(const BluetoothLEAdvertisementRece
 
 }
 
+//TODO USE THIS TO FILTER DEVICES
 bool ConnectionManager::isDesiredDevice(const IBuffer& value){
+    cout << "isDesireDevice [NEEDS TO BE IMPLEMENTED]" << endl;
     auto data = value.data();
     size_t len = value.Length();
 
