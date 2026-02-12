@@ -4,7 +4,7 @@
 if not exist bin mkdir bin
 if not exist bin\Desktop mkdir bin\Desktop
 
-set FILES=SecurityManager.cpp ECDHE.cpp EC_Point.cpp EC_Curve.cpp Desktop.cpp ConnectionManager.cpp AES_128_CCM.cpp
+set FILES=SecurityManager.cpp ECC.cpp Desktop.cpp ConnectionManager.cpp AES_128_GCM.cpp
 
 ::Compile all files
 for %%f in (%FILES%) do (
