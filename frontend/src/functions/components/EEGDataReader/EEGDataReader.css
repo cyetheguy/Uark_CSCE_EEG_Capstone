@@ -190,6 +190,18 @@
   color: var(--text-primary);
 }
 
+.theme-light .slider {
+  background-color: #d4c4a0;
+}
+
+.theme-light input:checked + .slider {
+  background-color: var(--accent-color);
+}
+
+.theme-light input:focus + .slider {
+  box-shadow: 0 0 1px var(--accent-color);
+}
+
 .theme-light .connection-panel,
 .theme-light .stats-panel,
 .theme-light .visualization-panel,
@@ -499,11 +511,11 @@ input:checked + .slider:before {
 
 /* Slightly lighter heading color for visibility in all conditions */
 .theme-dark .settings-header h2 {
-  color: #f1f5f9;
+  color: #adb1b4;
 }
 
 .theme-light .settings-header h2 {
-  color: #4a4539;
+  color: #94928e;
 }
 
 .close-settings-button {
