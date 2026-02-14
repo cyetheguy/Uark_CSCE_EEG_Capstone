@@ -39,7 +39,7 @@ const EEGDataReader: React.FC = () => {
 
   // Custom Hooks
   const auth = useAuth();
-  const settings = useSettings();
+  const settings = useSettings(auth.isAuthenticated ? auth.username : null);
   const sleepData = useSleepData();
   const updates = useUpdates(settings.settings);
 

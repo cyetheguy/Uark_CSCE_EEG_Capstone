@@ -160,6 +160,78 @@
   color: #2d2817;
 }
 
+/* Light theme: replace dark blue boxes with light panels and ensure text is visible */
+.theme-light .app-header {
+  background: rgba(255, 254, 249, 0.95);
+  border-color: rgba(184, 134, 11, 0.2);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.2),
+    0 0 0 1px rgba(184, 134, 11, 0.08);
+}
+
+.theme-light .header-left h1 {
+  color: var(--text-primary);
+}
+
+.theme-light .header-left .user-info {
+  color: var(--text-secondary);
+}
+
+.theme-light .mode-switch {
+  background: rgba(255, 254, 249, 0.95);
+  border-color: var(--border-color);
+}
+
+.theme-light .mode-label {
+  color: var(--text-secondary);
+}
+
+.theme-light .mode-label.active {
+  color: var(--text-primary);
+}
+
+.theme-light .connection-panel,
+.theme-light .stats-panel,
+.theme-light .visualization-panel,
+.theme-light .updates-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .panel-header h2 {
+  color: var(--text-primary);
+}
+
+.theme-light .session-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .sleep-stats-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .sleep-stats-panel h2 {
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.theme-light .sleep-stage-timeline h3 {
+  color: var(--text-primary);
+}
+
 /* 16:9 viewport wrapper – login screen only */
 .eeg-app-viewport {
   /* Slightly taller than 16:9 to reduce the need for scrolling */
