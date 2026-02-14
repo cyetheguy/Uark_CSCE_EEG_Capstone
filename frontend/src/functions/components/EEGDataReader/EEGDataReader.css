@@ -497,6 +497,15 @@ input:checked + .slider:before {
   color: var(--text-primary);
 }
 
+/* Slightly lighter heading color for visibility in all conditions */
+.theme-dark .settings-header h2 {
+  color: #f1f5f9;
+}
+
+.theme-light .settings-header h2 {
+  color: #4a4539;
+}
+
 .close-settings-button {
   background: none;
   border: none;
