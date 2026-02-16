@@ -1,10 +1,11 @@
 import { getFile } from '@inrupt/solid-client';
 import { getDefaultSession } from '@inrupt/solid-client-authn-browser';
-import { parseModbusData } from '../parsers/modbusParser';
 import { parseSliderData } from '../parsers/sliderParser';
 import { DataPoint, ModbusData, SliderData, isModbusData, isSliderData } from '../dataTypes';
 
 const baseURI = import.meta.env.VITE_BASE_URI;
+// Parser migration: backend URL for Modbus parse API
+const backendUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
 
 // Fetches data from Solid Pod using Solid client library
 // User can choose between different data sources 
@@ -20,16 +21,31 @@ export class DataService {
         `${baseURI}/${podName}/modbus/`,
         { fetch: this.session.fetch }
       );
-      
+
       if (modbusFile) {
         const content = await modbusFile.text();
-        return parseModbusData(content);
+        // Parser migration: send raw content to backend instead of parseModbusData(content)
+        const response = await fetch(`${backendUrl}/api/modbus/parse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(err.error ?? `Backend error ${response.status}`);
+        }
+        const raw: Array<{ timestamp: string; [key: string]: unknown }> = await response.json();
+        // Parser migration: backend returns ISO timestamps; convert to Date for frontend
+        return raw.map((item) => ({
+          ...item,
+          timestamp: new Date(item.timestamp),
+        })) as ModbusData[];
       }
     } catch (modbusError) {
       console.error('Error fetching modbus data:', modbusError);
       throw modbusError;
     }
-    
+
     return [];
   }
 
