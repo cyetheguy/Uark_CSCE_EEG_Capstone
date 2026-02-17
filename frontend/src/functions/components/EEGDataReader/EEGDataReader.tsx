@@ -43,19 +43,20 @@ const EEGDataReader: React.FC = () => {
   const sleepData = useSleepData();
   const updates = useUpdates(settings.settings);
 
-  // Effects
+  // Effects: Live = BLE stream (default); Review = session list / EDF from file
   useEffect(() => {
-    if (auth.isAuthenticated) {
-      sleepData.loadEDFPlot(auth.username || 'demo');
-      updates.addUpdate('Starting real-time EDF stream at 100Hz...');
+    if (!auth.isAuthenticated) return;
+    if (mode === 'live') {
+      sleepData.loadEDFPlot(auth.username || 'demo', 'live');
+      updates.addUpdate('Starting live acquisition (BLE)...');
+    } else {
+      sleepData.cleanupStreams();
+      sleepData.setSelectedSession(null);
+      if (sleepData.sessionList.length === 0) {
+        sleepData.fetchSessionList();
+      }
     }
-  }, [auth.isAuthenticated, auth.username]);
-
-  useEffect(() => {
-    if (mode === 'review' && auth.isAuthenticated && sleepData.sessionList.length === 0) {
-      sleepData.fetchSessionList();
-    }
-  }, [mode, auth.isAuthenticated]);
+  }, [auth.isAuthenticated, auth.username, mode]);
 
   useEffect(() => {
     return () => {
@@ -66,7 +67,11 @@ const EEGDataReader: React.FC = () => {
   // Event Handlers
   const handleModeChange = (newMode: 'live' | 'review') => {
     setMode(newMode);
-    updates.addUpdate(`Switched to ${newMode} mode`);
+    if (newMode === 'live') {
+      updates.addUpdate('Switched to Live (BLE acquisition)');
+    } else {
+      updates.addUpdate('Switched to Review sessions (EDF from file)');
+    }
   };
 
   const handleSelectSession = (session: any) => {
@@ -146,18 +151,32 @@ const EEGDataReader: React.FC = () => {
   // Calculations
   const sleepStats: SleepStats | null = sleepData.calculateSleepStats();
 
-  // Format data for EEGChart
+  // Format data for EEGChart (downsample if needed so the chart renders)
   const getChartData = () => {
     if (!sleepData.selectedSession) return [];
-    
-    return sleepData.selectedSession.timestamps.map((timestamp, index) => ({
-      timestamp,
-      value: sleepData.selectedSession!.channelData[index][selectedChannel],
-      channel: selectedChannel,
-      deviceId: sleepData.selectedSession!.deviceId,
-      quality: sleepData.selectedSession!.quality,
-      sleepStage: sleepData.getSleepStageAtTime(sleepData.selectedSession!.sleepStages, timestamp)
-    }));
+    const session = sleepData.selectedSession;
+    const n = session.timestamps.length;
+    if (n === 0) return [];
+    const maxPoints = 4000;
+    const step = n <= maxPoints ? 1 : Math.ceil(n / maxPoints);
+    let indices: number[];
+    if (step === 1) {
+      indices = Array.from({ length: n }, (_, i) => i);
+    } else {
+      indices = Array.from({ length: Math.ceil(n / step) }, (_, i) => Math.min(i * step, n - 1));
+      if (indices[indices.length - 1] !== n - 1) indices.push(n - 1);
+    }
+    return indices.map((index) => {
+      const timestamp = session.timestamps[index];
+      return {
+        timestamp,
+        value: session.channelData[index][selectedChannel],
+        channel: selectedChannel,
+        deviceId: session.deviceId,
+        quality: session.quality,
+        sleepStage: sleepData.getSleepStageAtTime(session.sleepStages, timestamp)
+      };
+    });
   };
 
   // Render Login Screen (inside 16:9 viewport)
@@ -218,22 +237,40 @@ const EEGDataReader: React.FC = () => {
               />
 
               {sleepData.edfStreamState.isStreaming && (
-                <div className="visualization-panel">
+                <div className="visualization-panel acquisition-panel">
                   <div className="panel-header">
-                    <h2>Device Health</h2>
+                    <h2>Acquisition status</h2>
                   </div>
-                  <div className="visualization-content" style={{ padding: '0.85rem' }}>
-                    <div style={{ backgroundColor: '#234e52', borderRadius: '10px', padding: '1rem', border: '2px solid #38b2ac' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <span style={{ width: 10, height: 10, backgroundColor: '#f56565', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
-                        <span style={{ color: '#e6fffa', fontSize: '0.95rem', fontWeight: 'bold' }}>Streaming from EEG Sleep Device</span>
+                  <div className="visualization-content acquisition-content">
+                    <div className="acquisition-card">
+                      <div className="acquisition-header">
+                        <span className="acquisition-indicator" aria-hidden />
+                        <span className="acquisition-title">Live acquisition</span>
                       </div>
-                      <div style={{ color: '#b2f5ea', fontSize: '0.8rem', lineHeight: '1.6' }}>
-                        <p style={{ margin: '0.3rem 0' }}>📡 <strong>Source:</strong> backend/sessions/SC4001E0-PSG.edf</p>
-                        <p style={{ margin: '0.3rem 0' }}>⚡ <strong>Sampling Rate:</strong> 100 Hz (10ms per sample)</p>
-                        <p style={{ margin: '0.3rem 0' }}>📊 <strong>Samples Loaded:</strong> {sleepData.selectedSession?.channelData.length.toLocaleString() || 0}</p>
-                        <p style={{ margin: '0.3rem 0' }}>⏱️ <strong>Duration:</strong> {sleepData.selectedSession ? (sleepData.selectedSession.channelData.length / 100 / 60).toFixed(2) : 0} minutes</p>
-                      </div>
+                      <dl className="acquisition-meta">
+                        <dt>Data source</dt>
+                        <dd>{sleepData.selectedSession?.deviceId ?? '—'}</dd>
+                        <dt>Sampling rate</dt>
+                        <dd>{(() => {
+                          const s = sleepData.selectedSession;
+                          if (!s?.timestamps?.length) return '—';
+                          if (s.timestamps.length < 2) return '—';
+                          const spanSec = (s.timestamps[s.timestamps.length - 1].getTime() - s.timestamps[0].getTime()) / 1000;
+                          if (spanSec <= 0) return '—';
+                          const rate = (s.timestamps.length - 1) / spanSec;
+                          return rate >= 1 ? `${rate.toFixed(1)} Hz` : `${(1 / rate).toFixed(1)} s per sample`;
+                        })()}</dd>
+                        <dt>Samples acquired</dt>
+                        <dd>{sleepData.selectedSession?.channelData.length.toLocaleString() ?? 0}</dd>
+                        <dt>Recording duration</dt>
+                        <dd>{(() => {
+                          const s = sleepData.selectedSession;
+                          if (!s?.timestamps?.length) return '0';
+                          if (s.timestamps.length < 2) return '0';
+                          const min = (s.timestamps[s.timestamps.length - 1].getTime() - s.timestamps[0].getTime()) / 60000;
+                          return `${min.toFixed(2)} min`;
+                        })()}</dd>
+                      </dl>
                     </div>
                   </div>
                 </div>
@@ -253,7 +290,7 @@ const EEGDataReader: React.FC = () => {
               {sleepData.edfStreamState.plotError && (
                 <div className="visualization-panel">
                   <div className="panel-header">
-                    <h2>Stream Status</h2>
+                    <h2>Acquisition error</h2>
                   </div>
                   <div className="visualization-content">
                     <div className="error-message">{sleepData.edfStreamState.plotError}</div>

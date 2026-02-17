@@ -73,19 +73,19 @@ const EEGChart: React.FC<EEGChartProps> = ({
     );
   }
 
-  // Format data for Recharts
+  // Format data for Recharts (elapsed time in hours for x-axis)
   const chartData = data.map(d => ({
     time: d.timestamp,
     hours: (d.timestamp.getTime() - data[0].timestamp.getTime()) / (60 * 60 * 1000),
-    timestampStr: d.timestamp.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit'
-    }),
+    elapsedSec: (d.timestamp.getTime() - data[0].timestamp.getTime()) / 1000,
+    timestampStr: d.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     value: d.value,
     sleepStage: d.sleepStage,
     quality: d.quality,
     deviceId: d.deviceId
   }));
+
+  const is1SamplePerSec = data.length >= 2 && Math.abs((data[1].timestamp.getTime() - data[0].timestamp.getTime()) - 1000) < 500;
 
   // Calculate statistics for entire sleep session
   const values = chartData.map(d => d.value);
@@ -114,9 +114,12 @@ const EEGChart: React.FC<EEGChartProps> = ({
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
-      const hour = Math.floor(data.hours);
-      const minute = Math.floor((data.hours - hour) * 60);
-      
+      const totalMin = Math.floor(data.hours * 60);
+      const hour = Math.floor(totalMin / 60);
+      const minute = totalMin % 60;
+      const elapsedLabel = hour > 0
+        ? `Elapsed ${hour} h ${minute} min`
+        : `Elapsed ${minute} min`;
       return (
         <div style={{
           backgroundColor: 'var(--bg-secondary)',
@@ -127,7 +130,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
           maxWidth: '300px'
         }}>
           <p style={{ margin: 0, fontWeight: 'bold', color: color }}>
-            Sleep Hour {hour}:{minute.toString().padStart(2, '0')}
+            {elapsedLabel}
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.9em', color: 'var(--text-primary)' }}>
             <strong>EEG Amplitude:</strong> {data.value.toFixed(2)} µV
@@ -197,10 +200,11 @@ const EEGChart: React.FC<EEGChartProps> = ({
         }}>
           <div>
             <span style={{ color: 'var(--text-secondary)', marginRight: '8px' }}>
-              Sleep EEG - {data.length.toLocaleString()} samples
+              Sleep EEG – {data.length.toLocaleString()} samples
+              {is1SamplePerSec && <span style={{ marginLeft: '6px', color: 'var(--text-secondary)', fontWeight: 'normal' }}>(1/s)</span>}
             </span>
             <span style={{ color: color, fontWeight: 'bold' }}>
-              {((data[data.length - 1]?.timestamp.getTime() - data[0]?.timestamp.getTime()) / (60 * 60 * 1000)).toFixed(1)} hours
+              {((data[data.length - 1]?.timestamp.getTime() - data[0]?.timestamp.getTime()) / (60 * 60 * 1000)).toFixed(1)} h elapsed
             </span>
           </div>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
@@ -224,11 +228,9 @@ const EEGChart: React.FC<EEGChartProps> = ({
         </div>
       )}
       
-      {/* <ResponsiveContainer width="100%" height={showStats ? 'calc(100% - 50px)' : '100%'}> */}
-      <ResponsiveContainer width="100%">
-
+      <ResponsiveContainer width="100%" height={height - (showStats ? 58 : 0)}>
         {chartType === 'area' ? (
-          <AreaChart data={chartData}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, bottom: 44, left: 50 }}>
             <CartesianGrid 
               strokeDasharray="3 3" 
               stroke="var(--border-color)" 
@@ -239,9 +241,9 @@ const EEGChart: React.FC<EEGChartProps> = ({
               stroke="var(--text-secondary)"
               tick={{ fontSize: 11 }}
               label={{ 
-                value: 'Sleep Hours', 
+                value: 'Elapsed time (h)', 
                 position: 'insideBottom',
-                offset: -5,
+                offset: 0,
                 style: { fill: 'var(--text-primary)', fontSize: 12 }
               }}
               tickFormatter={(value) => `${value.toFixed(1)}h`}
@@ -273,7 +275,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
             />
           </AreaChart>
         ) : (
-          <LineChart data={chartData}>
+          <LineChart data={chartData} margin={{ top: 10, right: 10, bottom: 44, left: 50 }}>
             <CartesianGrid 
               strokeDasharray="3 3" 
               stroke="var(--border-color)" 
@@ -284,9 +286,9 @@ const EEGChart: React.FC<EEGChartProps> = ({
               stroke="var(--text-secondary)"
               tick={{ fontSize: 11 }}
               label={{ 
-                value: 'Sleep Hours', 
+                value: 'Elapsed time (h)', 
                 position: 'insideBottom',
-                offset: -5,
+                offset: 0,
                 style: { fill: 'var(--text-primary)', fontSize: 12 }
               }}
               tickFormatter={(value) => `${value.toFixed(1)}h`}

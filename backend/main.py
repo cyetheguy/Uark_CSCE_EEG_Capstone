@@ -1,3 +1,4 @@
+from __future__ import annotations
 import sys
 import array
 import io
@@ -5,6 +6,8 @@ import base64
 import subprocess
 import threading
 import os
+import re
+from collections import deque
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -22,6 +25,49 @@ from crypto_ops import authenticate, create_usr_file
 from modbus_parser import parse_modbus_data
 import glob
 
+# ── Bluetooth (Desktop subprocess) hex capture ───────────────────────────────
+# When Desktop receives BLE characteristic values it prints "Value (02x hex): XX..."
+# We capture those lines and parse to numeric samples for debug-mode EDF streaming.
+BLUETOOTH_HEX_MAX_LINES = 500
+BLUETOOTH_SAMPLES_MAX = 100_000
+_bluetooth_hex_lines: deque = deque(maxlen=BLUETOOTH_HEX_MAX_LINES)
+_bluetooth_samples: list = []
+_bluetooth_samples_lock = threading.Lock()
+_HEX_LINE_PREFIX = "Value (02x hex): "
+
+def _parse_hex_value_line(line: str) -> tuple[str | None, float | None]:
+    """If line is 'Value (02x hex): XXYY...', return (raw_hex_str, parsed_float_or_none)."""
+    line = line.strip()
+    if not line.startswith(_HEX_LINE_PREFIX):
+        return None, None
+    raw_hex = line[len(_HEX_LINE_PREFIX):].strip()
+    if not raw_hex:
+        return raw_hex or None, None
+    # Normalize: remove spaces, take only hex chars
+    hex_chars = re.sub(r"[^0-9a-fA-F]", "", raw_hex)
+    if len(hex_chars) % 2:
+        hex_chars = "0" + hex_chars
+    try:
+        raw_bytes = bytes.fromhex(hex_chars)
+    except ValueError:
+        return raw_hex, None
+    # Device sends ASCII string (e.g. "123.456789") over BLE; Desktop prints hex of those bytes
+    try:
+        s = raw_bytes.decode("utf-8")
+        return raw_hex, float(s.strip())
+    except (ValueError, UnicodeDecodeError):
+        pass
+    # Fallback: treat as 16-bit LE pairs (e.g. binary EEG)
+    if len(raw_bytes) >= 2:
+        import struct
+        vals = []
+        for i in range(0, len(raw_bytes), 2):
+            if i + 2 <= len(raw_bytes):
+                vals.append(struct.unpack_from("<h", raw_bytes, i)[0])
+        if vals:
+            return raw_hex, float(vals[0])
+    return raw_hex, None
+
 app = Flask(__name__)
 CORS(app)  # Enables the React frontend to talk to this Python backend
 
@@ -36,10 +82,19 @@ _desktop_proc: subprocess.Popen | None = None
 _desktop_lock = threading.Lock()
 
 def _drain_desktop_stdout(proc: subprocess.Popen):
-    """Read stdout from main.exe and print it so it shows in the backend window."""
+    """Read stdout from main.exe; print it and capture hex lines / parsed samples."""
+    global _bluetooth_hex_lines, _bluetooth_samples
     try:
         for line in proc.stdout:
             print(f"[Desktop] {line}", end="", flush=True)
+            raw_hex, value = _parse_hex_value_line(line)
+            if raw_hex is not None:
+                _bluetooth_hex_lines.append({"raw": line.strip(), "hex": raw_hex})
+            if value is not None:
+                with _bluetooth_samples_lock:
+                    _bluetooth_samples.append(value)
+                    if len(_bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
+                        _bluetooth_samples.pop(0)
     except Exception:
         pass
 
@@ -107,6 +162,20 @@ def get_edf_file_for_user(username: str) -> Path:
     if edf_files:
         return edf_files[0]
     raise FileNotFoundError("No EDF files in sessions directory")
+
+
+def get_edf_start_and_duration(edf_path: Path) -> tuple[str, str, float]:
+    """Return (start_date_str, start_time_str, duration_seconds) from EDF fixed header.
+    EDF format: startdate at bytes 168:176 (dd.mm.yy), starttime at 176:184 (hh.mm.ss)."""
+    with open(edf_path, 'rb') as fh:
+        fixed = fh.read(256)
+    startdate = (fixed[168:176].decode("ascii", "ignore") or "01.01.00").strip()
+    starttime = (fixed[176:184].decode("ascii", "ignore") or "00.00.00").strip()
+    num_records = int(fixed[236:244].decode("ascii", "ignore").strip() or "-1")
+    record_duration = float(fixed[244:252].decode("ascii", "ignore").strip() or "1")
+    duration_sec = (num_records * record_duration) if num_records > 0 else 0
+    return startdate, starttime, duration_sec
+
 
 def read_edf_header(fh):
     """Read EDF header"""
@@ -192,7 +261,7 @@ def read_edf_samples(edf_path, channel_idx=0, max_samples=3000):
         
         return np.array(samples), sfreq, header['labels'][channel_idx]
 
-WINDOW_SECONDS = 5
+WINDOW_SECONDS = 60
 PLOT_UPDATE_INTERVAL = 0.1  # seconds between plot updates (~10 FPS; data still advances at 100Hz)
 
 def generate_eeg_plot(samples, sfreq, channel_label, time_start_sec=0):
@@ -203,7 +272,7 @@ def generate_eeg_plot(samples, sfreq, channel_label, time_start_sec=0):
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     fig.suptitle(f'EEG Analysis - {channel_label}', fontsize=14, fontweight='bold')
     
-    # Plot 1: Time-domain signal (5 second window)
+    # Plot 1: Time-domain signal (WINDOW_SECONDS second window)
     display_samples = min(int(WINDOW_SECONDS * sfreq), len(samples))
     # X-axis: show actual time interval in recording (e.g. 10s - 30s)
     time_axis = time_start_sec + np.arange(display_samples) / sfreq
@@ -390,15 +459,50 @@ def iter_edf_samples_continuously(edf_path, channel_idx=0):
                 
             record_idx += 1
 
+def _is_live_mode() -> bool:
+    """True when request asks for live (BLE) data; False for review (EDF file). Default is live."""
+    return request.args.get('mode', 'live').lower() == 'live'
+
+
 @app.route('/api/edf/stream', methods=['GET'])
 def stream_edf_data():
-    """Stream EDF data in real-time at 100Hz"""
+    """Stream EDF data in real-time. mode=live (default): from BLE. mode=review: from EDF file."""
+    live = _is_live_mode()
+
     def generate():
         import time
         import json
-        
+
         try:
-            # Get first EDF file
+            if live:
+                # Live mode: yield samples from Bluetooth capture
+                printDebug("EDF stream: using BLE data (live mode)")
+                sample_count = 0
+                start_time = time.time()
+                last_len = 0
+                while True:
+                    with _bluetooth_samples_lock:
+                        n = len(_bluetooth_samples)
+                        if n > last_len:
+                            new_samples = _bluetooth_samples[last_len:n]
+                            last_len = n
+                        else:
+                            new_samples = []
+                    for value in new_samples:
+                        elapsed = time.time() - start_time
+                        data_point = {
+                            'value': value,
+                            'timestamp': elapsed,
+                            'sample': sample_count
+                        }
+                        yield f"data: {json.dumps(data_point)}\n\n"
+                        sample_count += 1
+                    time.sleep(0.01)
+                    if time.time() - start_time > 3600:
+                        break
+                return
+
+            # Review mode: stream from EDF file
             edf_files = list(SESSIONS_DIR.glob('*.edf'))
             if not edf_files:
                 yield f"data: {json.dumps({'error': 'No EDF files found'})}\n\n"
@@ -442,8 +546,18 @@ def stream_edf_data():
 
 @app.route('/api/edf/plot', methods=['GET'])
 def get_edf_plot():
-    """Generate matplotlib plot (EEG signal + power spectrum) and return as PNG"""
+    """Generate matplotlib plot. mode=live: BLE samples. mode=review: EDF file."""
     try:
+        if _is_live_mode():
+            with _bluetooth_samples_lock:
+                samples = list(_bluetooth_samples)[-(int(WINDOW_SECONDS * 100)):]
+            if len(samples) < 10:
+                return jsonify({"error": "Not enough BLE samples yet (live mode)"}), 503
+            sfreq = 100.0
+            channel_label = "BLE"
+            img_buffer = generate_eeg_plot(samples, sfreq, channel_label)
+            return send_file(img_buffer, mimetype='image/png')
+
         if not SESSIONS_DIR.exists():
             return jsonify({"error": "Sessions directory not found"}), 404
         
@@ -452,7 +566,7 @@ def get_edf_plot():
             return jsonify({"error": "No EDF files found"}), 404
         
         edf_file = edf_files[0]
-        # Read 20 seconds of data (2000 samples at 100Hz)
+        # Read 60 seconds of data (6000 samples at 100Hz)
         samples, sfreq, channel_label = read_edf_samples(str(edf_file), channel_idx=0, max_samples=int(WINDOW_SECONDS * sfreq))
         
         if len(samples) == 0:
@@ -469,47 +583,74 @@ def get_edf_plot():
 
 @app.route('/api/edf/plot/stream', methods=['GET'])
 def stream_edf_plot():
-    """Stream matplotlib plots in real time; data advances at 100Hz, new plot every PLOT_UPDATE_INTERVAL."""
+    """Stream matplotlib plots. mode=live: BLE data. mode=review: EDF file."""
     import json as _json
-    # Resolve EDF file and header once (outside generator) so errors return immediately
-    try:
-        username = request.args.get('username', 'demo')
-        edf_file = get_edf_file_for_user(username)
-        with open(str(edf_file), 'rb') as fh:
-            header = read_edf_header(fh)
-        channel_label = header['labels'][0]
-        sfreq = header['samples_per_record'][0] / header['record_duration']
-        edf_path = str(edf_file)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        from flask import Response
-        return Response(
-            f"data: {_json.dumps({'error': str(e)})}\n\n",
-            mimetype='text/event-stream',
-            headers={'Cache-Control': 'no-cache'}
-        )
+    from flask import Response
+
+    live = _is_live_mode()
+    if live:
+        channel_label = "BLE"
+        sfreq = 100.0
+        edf_path = None
+        edf_file = None
+    else:
+        try:
+            username = request.args.get('username', 'demo')
+            edf_file = get_edf_file_for_user(username)
+            with open(str(edf_file), 'rb') as fh:
+                header = read_edf_header(fh)
+            channel_label = header['labels'][0]
+            sfreq = header['samples_per_record'][0] / header['record_duration']
+            edf_path = str(edf_file)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                f"data: {_json.dumps({'error': str(e)})}\n\n",
+                mimetype='text/event-stream',
+                headers={'Cache-Control': 'no-cache'}
+            )
 
     def generate():
         import time
         import json
-        window_samples = min(int(WINDOW_SECONDS * sfreq), 2000)
+        window_samples = min(int(WINDOW_SECONDS * sfreq), 8000)  # allow up to 80s at 100Hz; WINDOW_SECONDS=60 → 6000
         samples_per_update = max(1, int(sfreq * PLOT_UPDATE_INTERVAL))
-        sample_iter = iter_edf_samples_continuously(edf_path, channel_idx=0)
         buffer = []
         total_samples_read = 0
         update_count = 0
-        printDebug(f"Plot stream: {edf_file.name} at {sfreq} Hz, plot every {PLOT_UPDATE_INTERVAL}s")
+        last_len = 0
+        if live:
+            printDebug("Plot stream: using BLE data (live mode)")
+        else:
+            printDebug(f"Plot stream: {edf_file.name} at {sfreq} Hz, plot every {PLOT_UPDATE_INTERVAL}s")
+        sample_iter = None if live else iter_edf_samples_continuously(edf_path, channel_idx=0)
+
         while True:
-            for _ in range(samples_per_update):
-                try:
-                    buffer.append(next(sample_iter))
+            if live:
+                with _bluetooth_samples_lock:
+                    n = len(_bluetooth_samples)
+                    if n > last_len:
+                        new_part = _bluetooth_samples[last_len:n]
+                        last_len = n
+                    else:
+                        new_part = []
+                for v in new_part:
+                    buffer.append(v)
                     total_samples_read += 1
-                except StopIteration:
-                    yield f"data: {json.dumps({'done': True})}\n\n"
-                    return
-            if len(buffer) > window_samples:
-                buffer = buffer[-window_samples:]
+                if len(buffer) > window_samples:
+                    buffer = buffer[-window_samples:]
+            else:
+                for _ in range(samples_per_update):
+                    try:
+                        buffer.append(next(sample_iter))
+                        total_samples_read += 1
+                    except StopIteration:
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                        return
+                if len(buffer) > window_samples:
+                    buffer = buffer[-window_samples:]
+
             if len(buffer) < 10:
                 time.sleep(PLOT_UPDATE_INTERVAL)
                 continue
@@ -531,11 +672,179 @@ def stream_edf_plot():
             if update_count > 36000:
                 break
 
-    from flask import Response
     return Response(generate(), mimetype='text/event-stream', headers={
         'Cache-Control': 'no-cache',
         'X-Accel-Buffering': 'no'
     })
+
+@app.route('/api/bluetooth/hex', methods=['GET'])
+def get_bluetooth_hex():
+    """Return recent hex lines captured from the Bluetooth (Desktop) subprocess stdout."""
+    n = min(int(request.args.get("n", 100)), BLUETOOTH_HEX_MAX_LINES)
+    lines = list(_bluetooth_hex_lines)[-n:]
+    return jsonify({
+        "success": True,
+        "lines": [{"raw": x["raw"], "hex": x["hex"]} for x in lines],
+        "count": len(lines)
+    }), 200
+
+@app.route('/api/bluetooth/samples', methods=['GET'])
+def get_bluetooth_samples():
+    """Return recent parsed numeric samples from BLE characteristic values (for debugging)."""
+    n = min(int(request.args.get("n", 1000)), BLUETOOTH_SAMPLES_MAX)
+    with _bluetooth_samples_lock:
+        samples = _bluetooth_samples[-n:] if _bluetooth_samples else []
+    return jsonify({
+        "success": True,
+        "samples": samples,
+        "count": len(samples)
+    }), 200
+
+@app.route('/api/sessions/list', methods=['GET'])
+def list_sessions():
+    """List EDF files in backend/sessions/ for Review mode."""
+    try:
+        if not SESSIONS_DIR.exists():
+            return jsonify({"success": True, "sessions": []}), 200
+        edf_files = sorted(SESSIONS_DIR.glob("*.edf"))
+        sessions = []
+        for path in edf_files:
+            try:
+                startdate, starttime, duration_sec = get_edf_start_and_duration(path)
+                # Parse dd.mm.yy and hh.mm.ss (only if numeric to avoid e.g. 'male_33y')
+                from datetime import datetime
+                parts_d = startdate.split(".")
+                parts_t = starttime.split(".")
+                day = int(parts_d[0]) if len(parts_d) >= 1 and parts_d[0].strip().isdigit() else 1
+                month = int(parts_d[1]) if len(parts_d) >= 2 and parts_d[1].strip().isdigit() else 1
+                yy = int(parts_d[2]) if len(parts_d) >= 3 and parts_d[2].strip().isdigit() else 0
+                year = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
+                hour = int(parts_t[0]) if len(parts_t) >= 1 and parts_t[0].strip().isdigit() else 0
+                min_ = int(parts_t[1]) if len(parts_t) >= 2 and parts_t[1].strip().isdigit() else 0
+                sec = int(parts_t[2]) if len(parts_t) >= 3 and parts_t[2].strip().isdigit() else 0
+                start_dt = datetime(year, month, day, hour, min_, sec)
+                end_dt = datetime.fromtimestamp(start_dt.timestamp() + duration_sec)
+                start_iso = start_dt.isoformat() + "Z"
+                end_iso = end_dt.isoformat() + "Z"
+                date_str = start_dt.strftime("%Y-%m-%d")
+                hour_range = start_dt.strftime("%I:%M %p") + " – " + end_dt.strftime("%I:%M %p")
+            except Exception:
+                start_iso = ""
+                end_iso = ""
+                date_str = path.stem
+                hour_range = "—"
+            sessions.append({
+                "id": path.name,
+                "filename": path.name,
+                "deviceId": path.stem,
+                "startTime": start_iso,
+                "endTime": end_iso,
+                "date": date_str,
+                "hourRange": hour_range,
+            })
+        return jsonify({"success": True, "sessions": sessions}), 200
+    except Exception as e:
+        printDebug(f"Error listing sessions: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/sessions/<session_id>/data', methods=['GET'])
+def get_session_data(session_id: str):
+    """Load one EDF session by filename (id) for Review mode. Returns timestamps and channelData."""
+    import datetime as dt
+    try:
+        # Restrict to files in SESSIONS_DIR (no path traversal)
+        if ".." in session_id or "/" in session_id or "\\" in session_id:
+            return jsonify({"success": False, "error": "Invalid session id"}), 400
+        path = SESSIONS_DIR / session_id
+        if not path.exists() or not path.suffix.lower() == ".edf":
+            return jsonify({"success": False, "error": "Session not found"}), 404
+        # Load entire file when no window specified: use EDF length from header
+        with open(path, 'rb') as fh:
+            header = read_edf_header(fh)
+        num_records = header['num_records']
+        samples_per_sig = header['samples_per_record'][0]
+        if num_records > 0:
+            total_in_file = num_records * samples_per_sig
+            # Cap at 24 h at 512 Hz to avoid huge payloads
+            max_samples = min(total_in_file, 24 * 3600 * 512)
+        else:
+            max_samples = 500000
+        # Load at native rate then downsample to 1 sample per second for Review
+        samples_arr, sfreq, channel_label = read_edf_samples(str(path), channel_idx=0, max_samples=max_samples)
+        n_native = len(samples_arr)
+        step = max(1, int(round(sfreq)))  # 1 sample per second: take every sfreq-th sample
+        indices = list(range(0, n_native, step))
+        if indices and indices[-1] != n_native - 1:
+            indices.append(n_native - 1)
+        samples = [float(samples_arr[i]) for i in indices]
+        n_seconds = len(samples)
+        with open(path, 'rb') as fh:
+            header = read_edf_header(fh)
+        startdate, starttime, _ = get_edf_start_and_duration(path)
+        try:
+            parts_d = startdate.split(".")
+            parts_t = starttime.split(".")
+            day = int(parts_d[0]) if len(parts_d) >= 1 and parts_d[0].strip().isdigit() else 1
+            month = int(parts_d[1]) if len(parts_d) >= 2 and parts_d[1].strip().isdigit() else 1
+            yy = int(parts_d[2]) if len(parts_d) >= 3 and parts_d[2].strip().isdigit() else 0
+            year = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
+            hour = int(parts_t[0]) if len(parts_t) >= 1 and parts_t[0].strip().isdigit() else 0
+            min_ = int(parts_t[1]) if len(parts_t) >= 2 and parts_t[1].strip().isdigit() else 0
+            sec = int(parts_t[2]) if len(parts_t) >= 3 and parts_t[2].strip().isdigit() else 0
+            start_dt = dt.datetime(year, month, day, hour, min_, sec)
+        except (ValueError, TypeError):
+            start_dt = dt.datetime(2000, 1, 1, 0, 0, 0)
+        # Timestamps at 1-second intervals
+        start_ms = int(start_dt.timestamp() * 1000)
+        timestamps_ms = [start_ms + i * 1000 for i in range(n_seconds)]
+        channel_data = [[s] for s in samples]
+        # Build mock sleep stages for the loaded duration (review = realistic proportions)
+        start_ts = start_ms
+        duration_ms = n_seconds * 1000
+        end_ts = start_ts + duration_ms
+        stage_sequence = [
+            {"type": "awake", "duration": 0.1},
+            {"type": "light", "duration": 0.3},
+            {"type": "deep", "duration": 0.25},
+            {"type": "light", "duration": 0.15},
+            {"type": "rem", "duration": 0.2},
+        ]
+        stages_out = []
+        t = start_ts
+        idx = 0
+        while t < end_ts:
+            st = stage_sequence[idx % len(stage_sequence)]
+            dur_ms = duration_ms * st["duration"]
+            stage_end = min(t + dur_ms, end_ts)
+            stages_out.append({
+                "type": st["type"],
+                "startTime": dt.datetime.utcfromtimestamp(t / 1000).isoformat() + "Z",
+                "endTime": dt.datetime.utcfromtimestamp(stage_end / 1000).isoformat() + "Z",
+                "duration": (stage_end - t) / (60 * 1000),
+            })
+            t = stage_end
+            idx += 1
+            if t >= end_ts:
+                break
+        return jsonify({
+            "success": True,
+            "id": session_id,
+            "startTime": dt.datetime.utcfromtimestamp(start_ts / 1000).isoformat() + "Z",
+            "endTime": dt.datetime.utcfromtimestamp(end_ts / 1000).isoformat() + "Z",
+            "deviceId": path.stem,
+            "timestamps": timestamps_ms,
+            "channelData": channel_data,
+            "sleepStages": stages_out,
+            "quality": "good",
+            "sessionType": "night",
+        }), 200
+    except Exception as e:
+        printDebug(f"Error loading session {session_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/api/device/scan', methods=['POST'])
 def device_scan():
@@ -559,8 +868,16 @@ def device_scan():
 
 @app.route('/api/edf/info', methods=['GET'])
 def get_edf_info():
-    """Get EDF file information"""
+    """Get EDF info. mode=live (default): BLE placeholder. mode=review: EDF file metadata."""
     try:
+        if _is_live_mode():
+            return jsonify({
+                "success": True,
+                "filename": "BLE (live from Bluetooth)",
+                "num_signals": 1,
+                "labels": ["BLE"],
+                "sampling_rate": 100.0
+            }), 200
         username = request.args.get('username', 'demo')
         edf_file = get_edf_file_for_user(username)
         with open(str(edf_file), 'rb') as fh:

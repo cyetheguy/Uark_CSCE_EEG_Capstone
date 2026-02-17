@@ -15,31 +15,45 @@ export const useSleepData = () => {
   
   const edfEventSourceRef = useRef<EventSource | null>(null);
 
-  // Updated to support "fast" demo stages for live viewing
+  // AASM standard: one stage per 30-second epoch. Live demo uses realistic run lengths (minutes), not 10s hops.
+  const EPOCH_SEC = 30;
   const generateMockSleepStages = useCallback((start: Date, end: Date, isLiveDemo: boolean = false): SleepStage[] => {
     const durationMs = end.getTime() - start.getTime();
     const stages: SleepStage[] = [];
-    
+
     if (isLiveDemo) {
-      // FAST CYCLING for Live Demo (Change every 10 seconds)
+      // Epoch-based (30 s), realistic progression: Wake → N1/N2 → N3 → N2 → REM, with runs lasting minutes
+      const epochMs = EPOCH_SEC * 1000;
+      // Run lengths in number of 30s epochs (so 4 = 2 min, 10 = 5 min). No Wake→REM; must go through light/deep.
+      const sequence: Array<{ type: SleepStage['type']; epochs: number }> = [
+        { type: 'awake', epochs: 4 },      // ~2 min wake
+        { type: 'light', epochs: 12 },      // ~6 min N1/N2
+        { type: 'deep', epochs: 8 },       // ~4 min N3
+        { type: 'light', epochs: 6 },      // ~3 min N2
+        { type: 'rem', epochs: 10 },       // ~5 min REM
+        { type: 'light', epochs: 8 },
+        { type: 'deep', epochs: 6 },
+        { type: 'light', epochs: 6 },
+        { type: 'rem', epochs: 12 },
+        { type: 'light', epochs: 10 },
+        { type: 'deep', epochs: 6 },
+        { type: 'light', epochs: 4 },
+      ];
       let currentTime = start.getTime();
-      const stageTypes: SleepStage['type'][] = ['awake', 'light', 'deep', 'rem', 'light'];
-      let index = 0;
-      
+      let seqIndex = 0;
       while (currentTime < end.getTime()) {
-        const type = stageTypes[index % stageTypes.length];
-        const stageDuration = 10 * 1000; // 10 seconds per stage
-        const stageEnd = Math.min(currentTime + stageDuration, end.getTime());
-        
+        const { type, epochs } = sequence[seqIndex % sequence.length];
+        const runEpochs = Math.min(epochs, Math.ceil((end.getTime() - currentTime) / epochMs));
+        if (runEpochs <= 0) break;
+        const stageEnd = currentTime + runEpochs * epochMs;
         stages.push({
           type,
           startTime: new Date(currentTime),
           endTime: new Date(stageEnd),
-          duration: (stageEnd - currentTime) / (60 * 1000)
+          duration: (runEpochs * EPOCH_SEC) / 60
         });
-        
         currentTime = stageEnd;
-        index++;
+        seqIndex++;
       }
     } else {
       // NORMAL REALISTIC CYCLING for Historical Data
@@ -132,12 +146,13 @@ export const useSleepData = () => {
      setSessionList(demoList);
   }, []);
 
-  const loadEDFPlot = useCallback(async (username: string = 'demo') => {
+  const loadEDFPlot = useCallback(async (username: string = 'demo', mode: 'live' | 'review' = 'live') => {
     setIsLoading(true);
-    console.log("Initializing EDF Stream...");
-    
+    const modeParam = mode === 'live' ? 'live' : 'review';
+    console.log(`Initializing stream (mode=${modeParam})...`);
+
     try {
-      const infoResponse = await fetch(`http://localhost:5000/api/edf/info?username=${encodeURIComponent(username)}`);
+      const infoResponse = await fetch(`http://localhost:5000/api/edf/info?username=${encodeURIComponent(username)}&mode=${modeParam}`);
       const infoData = await infoResponse.json();
       
       if (!infoData.success) {
@@ -172,8 +187,9 @@ export const useSleepData = () => {
         edfEventSourceRef.current.close();
       }
 
-      console.log("Connecting to EventSource: http://localhost:5000/api/edf/stream");
-      const eventSource = new EventSource('http://localhost:5000/api/edf/stream');
+      const streamUrl = `http://localhost:5000/api/edf/stream?mode=${modeParam}`;
+      console.log("Connecting to EventSource:", streamUrl);
+      const eventSource = new EventSource(streamUrl);
       edfEventSourceRef.current = eventSource;
       
       let sampleCount = 0;
@@ -193,10 +209,13 @@ export const useSleepData = () => {
           streamSession.timestamps.push(timestamp);
           streamSession.channelData.push([data.value]);
           
-          // Refresh UI frequently at start, then throttle
-          if (sampleCount < 20 || sampleCount % 10 === 0) {
-            setSelectedSession({ ...streamSession });
-          }
+          // Update UI on every sample so amplitude and hypnogram reflect data every second
+          // Use new array refs so React detects the change and re-renders
+          setSelectedSession({
+            ...streamSession,
+            timestamps: [...streamSession.timestamps],
+            channelData: streamSession.channelData.map((row) => [...row]),
+          });
           
           sampleCount++;
           
@@ -223,16 +242,125 @@ export const useSleepData = () => {
     }
   }, [generateMockSleepStages]);
 
-  const fetchSessionList = useCallback(async () => { /* ... */ }, [generateDemoSessionList]);
-  const loadSessionData = useCallback(async (sessionId: string) => { /* ... */ }, [loadDemoSleepData]);
+  const fetchSessionList = useCallback(async () => {
+    setIsLoadingSessions(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/sessions/list');
+      const data = await res.json();
+      if (!data.success) {
+        setSessionList([]);
+        return;
+      }
+      const list: SessionMetadata[] = (data.sessions || []).map((s: {
+        id: string;
+        startTime: string;
+        endTime: string;
+        deviceId: string;
+        date: string;
+        hourRange: string;
+      }) => ({
+        id: s.id,
+        startTime: s.startTime,
+        endTime: s.endTime,
+        deviceId: s.deviceId,
+        date: s.date,
+        hourRange: s.hourRange,
+      }));
+      setSessionList(list);
+    } catch (err) {
+      console.error('Failed to fetch session list:', err);
+      setSessionList([]);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
+
+  const loadSessionData = useCallback(async (sessionId: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/sessions/${encodeURIComponent(sessionId)}/data`);
+      const data = await res.json();
+      if (!data.success || !data.timestamps || !data.channelData) {
+        console.error('Failed to load session:', data.error);
+        setIsLoading(false);
+        return;
+      }
+      const timestamps = (data.timestamps as number[]).map((ms: number) => new Date(ms));
+      const sleepStages: SleepStage[] = (data.sleepStages || []).map((s: { type: string; startTime: string; endTime: string; duration: number }) => ({
+        type: s.type as SleepStage['type'],
+        startTime: new Date(s.startTime),
+        endTime: new Date(s.endTime),
+        duration: s.duration,
+      }));
+      const session: SleepSessionData = {
+        id: data.id ?? sessionId,
+        startTime: new Date(data.startTime),
+        endTime: new Date(data.endTime),
+        deviceId: data.deviceId ?? sessionId,
+        timestamps,
+        channelData: data.channelData,
+        sleepStages,
+        quality: (data.quality as SleepSessionData['quality']) ?? 'good',
+        sessionType: (data.sessionType as SleepSessionData['sessionType']) ?? 'night',
+      };
+      setSleepSessions(prev => [...prev.filter(s => s.id !== session.id), session]);
+      setSelectedSession(session);
+    } catch (err) {
+      console.error('Failed to load session:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const calculateSleepStats = useCallback((): SleepStats | null => {
     if (!selectedSession) return null;
+    const timestamps = selectedSession.timestamps;
+    const stages = selectedSession.sleepStages;
+    const n = timestamps.length;
+
+    if (n === 0) {
+      return {
+        totalDuration: "0",
+        stageDurations: { awake: 0, light: 0, deep: 0, rem: 0 },
+        efficiency: "—",
+        numCycles: 0
+      };
+    }
+
+    const startMs = timestamps[0].getTime();
+    const endMs = timestamps[n - 1].getTime();
+    const totalMinutes = (endMs - startMs) / 60000;
+    const totalDurationHours = (totalMinutes / 60).toFixed(1);
+
+    const stageDurations: Record<string, number> = { awake: 0, light: 0, deep: 0, rem: 0 };
+    let awakeMinutes = 0;
+    for (const stage of stages) {
+      const stageStart = Math.max(stage.startTime.getTime(), startMs);
+      const stageEnd = Math.min(stage.endTime.getTime(), endMs);
+      if (stageEnd <= stageStart) continue;
+      const overlapMin = (stageEnd - stageStart) / 60000;
+      stageDurations[stage.type] = (stageDurations[stage.type] ?? 0) + overlapMin;
+      if (stage.type === 'awake') awakeMinutes += overlapMin;
+    }
+
+    const efficiency = totalMinutes > 0
+      ? Math.round((1 - awakeMinutes / totalMinutes) * 100).toString()
+      : "—";
+
+    let numCycles = 0;
+    if (stages.length >= 2) {
+      for (let i = 1; i < stages.length; i++) {
+        const prev = stages[i - 1].type;
+        const curr = stages[i].type;
+        if ((prev === 'deep' || prev === 'rem') && (curr === 'light' || curr === 'awake')) numCycles++;
+      }
+    }
+
     return {
-      totalDuration: "8.0",
-      stageDurations: { awake: 30, light: 200, deep: 150, rem: 100 },
-      efficiency: "90",
-      numCycles: 4
+      totalDuration: totalDurationHours,
+      stageDurations,
+      efficiency,
+      numCycles
     };
   }, [selectedSession]);
 
