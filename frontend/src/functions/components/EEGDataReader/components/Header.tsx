@@ -48,9 +48,9 @@ const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onScanDebug}
           className="settings-button"
-          title="Send debug scan to device"
+          title="Send scan to device"
         >
-          🔍 Scan (Debug)
+          🔍 Scan
         </button>
         <button 
           onClick={onShowSettings}
