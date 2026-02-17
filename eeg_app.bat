@@ -18,6 +18,7 @@ for %%a in (%*) do (
         py -m pip install Flask
         py -m pip install flask-cors
         py -m pip install numpy
+        py -m pip install matplotlib
 
 		:: Node.js install
 		nvm install latest
