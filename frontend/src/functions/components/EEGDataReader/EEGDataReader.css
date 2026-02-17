@@ -1,13 +1,15 @@
 /* Adds styles to the EEGDataReader.css file */
 
-/* Theme classes */
+/* Theme classes – light mode: gold motif */
 .theme-light {
-  --bg-primary: #f7fafc;
-  --bg-secondary: white;
-  --text-primary: #2d3748;
-  --text-secondary: #718096;
-  --border-color: #e2e8f0;
-  --accent-color: #667eea;
+  --bg-primary: #fdf8f0;
+  --bg-secondary: #fffef9;
+  --text-primary: #2d2817;
+  --text-secondary: #6b5d4a;
+  --border-color: #e8dcc8;
+  --accent-color: #b8860b;
+  --accent-light: #f5e6c8;
+  --accent-glow: rgba(184, 134, 11, 0.25);
 }
 
 /* Dark mode */
@@ -18,6 +20,228 @@
   --text-secondary: #a0aec0;
   --border-color: #4a5568;
   --accent-color: #764ba2;
+}
+
+/* Light theme (gold motif): app and login backgrounds */
+.theme-light .app-container {
+  background: linear-gradient(135deg, #f5ecd6 0%, #fdf8f0 35%, #f0e6d0 70%, #e8d8b8 100%);
+}
+
+.theme-light .login-container {
+  background: linear-gradient(135deg, #e8d8b8 0%, #f5ecd6 35%, #fdf8f0 70%, #f0e6d0 100%);
+  background-attachment: fixed;
+}
+
+.theme-light .login-card {
+  background: rgba(255, 253, 248, 0.98);
+  color: #2d2817;
+  box-shadow:
+    0 25px 50px -12px rgba(184, 134, 11, 0.2),
+    0 0 0 1px rgba(184, 134, 11, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.theme-light .login-header h1 {
+  color: #2d2817;
+}
+
+.theme-light .login-header p {
+  color: #6b5d4a;
+}
+
+.theme-light .login-form .form-group label {
+  color: #3d3520;
+}
+
+.theme-light .login-form .form-group input {
+  background: #fffef9;
+  border-color: #e8dcc8;
+}
+
+.theme-light .login-form .form-group input:hover {
+  border-color: #d4b896;
+}
+
+.theme-light .login-form .form-group input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.theme-light .error-message {
+  background: #fef8f0;
+  border-color: #f0d8b0;
+}
+
+.theme-light .login-button {
+  background: linear-gradient(135deg, #c9a227 0%, #b8860b 50%, #9a7209 100%);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.theme-light .login-button:hover:not(:disabled) {
+  box-shadow: 0 8px 24px rgba(184, 134, 11, 0.4);
+}
+
+.theme-light .demo-credentials {
+  background: linear-gradient(135deg, #fdf8f0 0%, #f5e6c8 100%);
+  border-color: #e8d4a8;
+}
+
+.theme-light .demo-credentials p {
+  color: #5c4a2a;
+}
+
+.theme-light .credential-pair,
+.theme-light .credential-pair code {
+  color: #6b5220;
+}
+
+.theme-light .credential-pair code {
+  background: var(--accent-light);
+}
+
+.theme-light .create-account-link p {
+  color: #6b5d4a;
+}
+
+.theme-light .create-account-button {
+  color: #b8860b;
+}
+
+.theme-light .create-account-button:hover {
+  color: #9a7209;
+}
+
+.theme-light .login-footer {
+  border-top-color: #e8dcc8;
+}
+
+.theme-light .login-footer p {
+  color: #6b5d4a;
+}
+
+.theme-light .create-account-modal {
+  background: #fffef9;
+  color: #2d2817;
+}
+
+.theme-light .create-account-header {
+  border-bottom-color: #e8dcc8;
+}
+
+.theme-light .create-account-header h2 {
+  color: #2d2817;
+}
+
+.theme-light .create-account-form .form-group input {
+  background: #fffef9;
+  border-color: #e8dcc8;
+}
+
+.theme-light .create-account-form .form-group input:hover {
+  border-color: #d4b896;
+}
+
+.theme-light .create-account-form .form-group input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.theme-light .create-account-submit-button {
+  background: linear-gradient(135deg, #b8960b 0%, #9a7209 100%);
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+
+.theme-light .create-account-submit-button:hover {
+  box-shadow: 0 8px 24px rgba(184, 134, 11, 0.4);
+}
+
+.theme-light .close-modal-button:hover {
+  background: var(--accent-light);
+  color: #2d2817;
+}
+
+/* Light theme: replace dark blue boxes with light panels and ensure text is visible */
+.theme-light .app-header {
+  background: rgba(255, 254, 249, 0.95);
+  border-color: rgba(184, 134, 11, 0.2);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.2),
+    0 0 0 1px rgba(184, 134, 11, 0.08);
+}
+
+.theme-light .header-left h1 {
+  color: var(--text-primary);
+}
+
+.theme-light .header-left .user-info {
+  color: var(--text-secondary);
+}
+
+.theme-light .mode-switch {
+  background: rgba(255, 254, 249, 0.95);
+  border-color: var(--border-color);
+}
+
+.theme-light .mode-label {
+  color: var(--text-secondary);
+}
+
+.theme-light .mode-label.active {
+  color: var(--text-primary);
+}
+
+.theme-light .slider {
+  background-color: #d4c4a0;
+}
+
+.theme-light input:checked + .slider {
+  background-color: var(--accent-color);
+}
+
+.theme-light input:focus + .slider {
+  box-shadow: 0 0 1px var(--accent-color);
+}
+
+.theme-light .connection-panel,
+.theme-light .stats-panel,
+.theme-light .visualization-panel,
+.theme-light .updates-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .panel-header h2 {
+  color: var(--text-primary);
+}
+
+.theme-light .session-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .sleep-stats-panel {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow:
+    0 4px 20px -8px rgba(184, 134, 11, 0.12),
+    0 0 0 1px var(--border-color);
+}
+
+.theme-light .sleep-stats-panel h2 {
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.theme-light .sleep-stage-timeline h3 {
+  color: var(--text-primary);
 }
 
 /* 16:9 viewport wrapper – login screen only */
@@ -283,6 +507,15 @@ input:checked + .slider:before {
 .settings-header h2 {
   margin: 0;
   color: var(--text-primary);
+}
+
+/* Slightly lighter heading color for visibility in all conditions */
+.theme-dark .settings-header h2 {
+  color: #adb1b4;
+}
+
+.theme-light .settings-header h2 {
+  color: #94928e;
 }
 
 .close-settings-button {

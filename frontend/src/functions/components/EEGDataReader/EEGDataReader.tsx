@@ -39,7 +39,7 @@ const EEGDataReader: React.FC = () => {
 
   // Custom Hooks
   const auth = useAuth();
-  const settings = useSettings();
+  const settings = useSettings(auth.isAuthenticated ? auth.username : null);
   const sleepData = useSleepData();
   const updates = useUpdates(settings.settings);
 
@@ -109,6 +109,30 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Logged out successfully');
   };
 
+  const handleScanDebug = async () => {
+    updates.addUpdate('Sending debug scan request to EEG device...');
+    try {
+      const response = await fetch('http://localhost:5000/api/device/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ debug: true }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data?.success) {
+        updates.addUpdate('✅ Debug scan command sent to Desktop client');
+      } else {
+        const msg = data?.error || data?.message || `HTTP ${response.status}`;
+        updates.addUpdate(`❌ Debug scan failed: ${msg}`);
+      }
+    } catch (error: any) {
+      updates.addUpdate(`❌ Debug scan error: ${error?.message || String(error)}`);
+    }
+  };
+
   const handleClearData = () => {
     sleepData.setSleepSessions([]);
     sleepData.setSelectedSession(null);
@@ -171,6 +195,7 @@ const EEGDataReader: React.FC = () => {
           mode={mode}
           onModeChange={handleModeChange}
           onShowSettings={() => setShowSettings(true)}
+          onScanDebug={handleScanDebug}
           onLogout={handleLogout}
         />
 

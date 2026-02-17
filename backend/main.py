@@ -2,6 +2,9 @@ import sys
 import array
 import io
 import base64
+import subprocess
+import threading
+import os
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -13,7 +16,10 @@ import matplotlib.pyplot as plt
 # Import your existing custom modules
 import debug
 from debug import printDebug
-from crypto_usr_test import authenticate, create_user_file
+import crypto_ops
+from crypto_ops import authenticate, create_usr_file
+# Parser migration: Modbus RDF parsing moved from frontend to backend
+from modbus_parser import parse_modbus_data
 import glob
 
 app = Flask(__name__)
@@ -23,6 +29,67 @@ CORS(app)  # Enables the React frontend to talk to this Python backend
 BACKEND_DIR = Path(__file__).parent
 SESSIONS_DIR = BACKEND_DIR / "sessions"
 USER_DIR = BACKEND_DIR / "user"
+
+# ── Desktop client (CommunicationManager) subprocess ────────────────────────
+DESKTOP_EXE = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "main.exe"
+_desktop_proc: subprocess.Popen | None = None
+_desktop_lock = threading.Lock()
+
+def _drain_desktop_stdout(proc: subprocess.Popen):
+    """Read stdout from main.exe and print it so it shows in the backend window."""
+    try:
+        for line in proc.stdout:
+            print(f"[Desktop] {line}", end="", flush=True)
+    except Exception:
+        pass
+
+def launch_desktop_client():
+    """Start main.exe with stdin piped so we can send commands from Flask."""
+    global _desktop_proc
+    with _desktop_lock:
+        if _desktop_proc is not None and _desktop_proc.poll() is None:
+            printDebug("Desktop client already running.")
+            return True
+
+        if not DESKTOP_EXE.exists():
+            print(f"[Desktop] WARNING: {DESKTOP_EXE} not found — build it with buildDesk.bat")
+            return False
+
+        try:
+            _desktop_proc = subprocess.Popen(
+                [str(DESKTOP_EXE)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=str(DESKTOP_EXE.parent),
+                text=True,
+                bufsize=1,
+            )
+            # Drain stdout in background so the pipe never fills up
+            t = threading.Thread(target=_drain_desktop_stdout, args=(_desktop_proc,), daemon=True)
+            t.start()
+            print(f"[Desktop] main.exe started (PID {_desktop_proc.pid})")
+            return True
+        except Exception as e:
+            print(f"[Desktop] Failed to start main.exe: {e}")
+            return False
+
+def send_desktop_command(cmd: str) -> bool:
+    """Send a single-word command to main.exe's stdin (e.g. 'scan')."""
+    global _desktop_proc
+    with _desktop_lock:
+        if _desktop_proc is None or _desktop_proc.poll() is not None:
+            print("[Desktop] Process not running — cannot send command.")
+            return False
+        try:
+            _desktop_proc.stdin.write(cmd.strip() + "\n")
+            _desktop_proc.stdin.flush()
+            print(f"[Desktop] Sent command: {cmd.strip()}")
+            return True
+        except Exception as e:
+            print(f"[Desktop] Error sending command '{cmd}': {e}")
+            return False
+# ─────────────────────────────────────────────────────────────────────────────
 
 def get_edf_file_for_user(username: str) -> Path:
     """Return which EDF file to use for this user (demo vs admin)."""
@@ -40,22 +107,6 @@ def get_edf_file_for_user(username: str) -> Path:
     if edf_files:
         return edf_files[0]
     raise FileNotFoundError("No EDF files in sessions directory")
-
-def username_exists(username: str) -> bool:
-    """Check if a username already exists by checking .USR filenames"""
-    if not USER_DIR.exists():
-        return False
-    
-    # Check if a file with this username exists (case-insensitive)
-    username_lower = username.lower()
-    usr_files = glob.glob(str(USER_DIR / "*.USR"))
-    
-    for file_path in usr_files:
-        file_username = Path(file_path).stem.lower()
-        if file_username == username_lower:
-            return True
-    
-    return False
 
 def read_edf_header(fh):
     """Read EDF header"""
@@ -223,7 +274,7 @@ def login():
 
     printDebug(f"Verification: {authenticate(username, password)}")
     if authenticate(username, password):
-        return jsonify({"success": 1, "message": "Login successful"}), 200
+        return jsonify({"success": 1, "message": "Login successful", "sessions": crypto_ops.decrypt_sessions()}), 200
     else:
         return jsonify({"success": 0, "message": "Invalid credentials"}), 200
 
@@ -244,30 +295,56 @@ def create_account():
     if not password or len(password) < 6:
         return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
     
-    # Check if username already exists
-    if username_exists(username):
-        return jsonify({"success": False, "error": "Username already exists"}), 400
-    
     try:
-        # Ensure user directory exists
-        USER_DIR.mkdir(exist_ok=True)
-        
-        # Create the .USR file - use absolute path
-        filename = str(USER_DIR / f"{username}.USR")
-        create_user_file(username, password, filename)
-        
-        printDebug(f"Created user file: {filename}")
-        
-        return jsonify({
+        success:bool = create_usr_file(username, password)
+        print(success)
+        if (success):
+            printDebug(f"Created user file: {username}")
+            print("Got Here")
+            return jsonify({
             "success": True,
-            "message": f"Account '{username}' created successfully"
-        }), 200
+            "message": f"Account '{username}' created successfully"}), 200
+        else:
+            print("IDK")
+            return jsonify({
+                "success": False,
+                "message": f"Account '{username}' already exists"
+            }), 200
         
     except Exception as e:
         printDebug(f"Error creating account: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "error": f"Failed to create account: {str(e)}"}), 500
+
+
+# Parser migration: endpoint for frontend to send raw RDF content and get parsed Modbus data
+@app.route('/api/modbus/parse', methods=['POST'])
+def api_modbus_parse():
+    """
+    Frontend sends the raw content from Solid Pod; backend does the parsing.
+    """
+    try:
+        data = request.get_json()
+        if data is None:
+            return jsonify({"error": "Request body must be JSON"}), 400
+
+        content = data.get("content")
+        if content is None:
+            return jsonify({"error": "Missing 'content' in request body"}), 400
+
+        if not isinstance(content, str):
+            return jsonify({"error": "'content' must be a string"}), 400
+
+        result = parse_modbus_data(content)
+        return jsonify(result), 200
+
+    except Exception as e:
+        printDebug(f"Error in /api/modbus/parse: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 def iter_edf_samples_continuously(edf_path, channel_idx=0):
     """Generator that yields EDF samples one at a time"""
@@ -460,6 +537,26 @@ def stream_edf_plot():
         'X-Accel-Buffering': 'no'
     })
 
+@app.route('/api/device/scan', methods=['POST'])
+def device_scan():
+    """Send a scan command to main.exe stdin, optionally with debug flag."""
+    data = request.get_json(silent=True) or {}
+    debug = bool(data.get("debug"))
+    cmd = "scan --debug" if debug else "scan"
+
+    ok = send_desktop_command(cmd)
+    if ok:
+        return jsonify({"success": True, "message": "scan sent to Desktop client"}), 200
+    # If the process isn't running yet, try to start it first then retry
+    started = launch_desktop_client()
+    if started:
+        import time; time.sleep(0.5)   # brief pause for init
+        ok = send_desktop_command(cmd)
+    if ok:
+        return jsonify({"success": True, "message": "scan sent to Desktop client"}), 200
+    return jsonify({"success": False, "error": "Desktop client not running"}), 503
+
+
 @app.route('/api/edf/info', methods=['GET'])
 def get_edf_info():
     """Get EDF file information"""
@@ -488,11 +585,15 @@ if __name__ == "__main__":
 
     print("Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
     print(f"Sessions directory: {SESSIONS_DIR.absolute()}")
-    
+
     if SESSIONS_DIR.exists():
         edf_count = len(list(SESSIONS_DIR.glob('*.edf')))
         print(f"Found {edf_count} EDF file(s) in sessions directory")
     else:
         print(f"WARNING: Sessions directory does not exist!")
-    
-    app.run(debug=True, port=5000)
+
+    # Launch Desktop client (CommunicationManager) as a managed subprocess.
+    # use_reloader=False prevents Flask from forking twice and starting two clients.
+    launch_desktop_client()
+
+    app.run(debug=True, port=5000, use_reloader=False)

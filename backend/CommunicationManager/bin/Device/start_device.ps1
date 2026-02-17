@@ -58,6 +58,8 @@ $rateMultiplier = 1.0
 Write-Output "start"
 Start-Sleep -Seconds $waitAfterStartSeconds
 
+$sampleCount = 0
+
 # Stream EDF data using Python script
 try {
     # Run Python script and capture output line by line
@@ -90,6 +92,7 @@ try {
         if ($eegValue -ne $null -and $eegValue -ne "") {
             Write-Output "send"
             Write-Output $eegValue
+            $sampleCount++
         }
     }
     
@@ -101,8 +104,6 @@ try {
     if ($errorOutput -and $process.ExitCode -ne 0) {
         Write-Host "Python script error: $errorOutput" -ForegroundColor Red
     }
-    
-    $process.Close()
 } catch {
     Write-Host "Error running Python script: $_" -ForegroundColor Red
     Write-Host "Falling back to test mode" -ForegroundColor Yellow
@@ -113,4 +114,13 @@ try {
         Write-Output $i
         Start-Sleep -Seconds 1
     }
+} finally {
+    if ($process -and -not $process.HasExited) {
+        $process.Kill()
+    }
+    if ($process) {
+        $process.Dispose()
+    }
 }
+
+Write-Host "Sent $sampleCount EEG samples" | Out-Host

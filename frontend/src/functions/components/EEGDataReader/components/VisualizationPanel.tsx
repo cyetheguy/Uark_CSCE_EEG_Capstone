@@ -173,16 +173,16 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                 </div>
 
                 <div style={{ 
-                  backgroundColor: '#2d3748', padding: '4px 12px', borderRadius: '4px', 
-                  fontSize: '0.85rem', border: '1px solid #4a5568', minWidth: '280px', textAlign: 'center'
+                  backgroundColor: 'var(--bg-secondary)', padding: '4px 12px', borderRadius: '4px', 
+                  fontSize: '0.85rem', border: '1px solid var(--border-color)', minWidth: '280px', textAlign: 'center'
                 }}>
                   {hoverData ? (
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.2' }}>
-                       <span style={{ color: '#e2e8f0', fontSize: '0.8em', marginBottom: '2px' }}>
+                       <span style={{ color: 'var(--text-primary)', fontSize: '0.8em', marginBottom: '2px' }}>
                          {hoverData.time}
                        </span>
                        {showRawData ? (
-                         <span style={{ color: '#63b3ed', fontWeight: 'bold' }}>
+                         <span style={{ color: 'var(--accent-color)', fontWeight: 'bold' }}>
                            Raw Val: {hoverData.value.toFixed(2)} µV
                          </span>
                        ) : (
@@ -198,7 +198,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                        )}
                     </div>
                   ) : (
-                    <span style={{ color: '#a0aec0' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>
                       Current: <strong style={{ color: STAGE_COLORS[currentStage], textTransform: 'capitalize' }}>{currentStage}</strong>
                     </span>
                   )}
@@ -209,14 +209,14 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             <div 
               className="graph-container" 
               style={{ 
-                height: '400px', padding: '1rem', backgroundColor: '#1a202c', 
+                height: '400px', padding: '1rem', backgroundColor: 'var(--bg-primary)', 
                 borderRadius: '8px 8px 0 0', overflow: 'hidden', position: 'relative' 
               }}
               onMouseEnter={() => setIsInteracting(true)}
               onMouseLeave={() => { setHoverData(null); setIsInteracting(false); }}
             >
               {realTimeData.length === 0 ? (
-                <div style={{ color: '#cbd5e0', textAlign: 'center', marginTop: '150px' }}>Waiting for data stream...</div>
+                <div style={{ color: 'var(--text-secondary)', textAlign: 'center', marginTop: '150px' }}>Waiting for data stream...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   {showRawData ? (
@@ -231,10 +231,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         });
                       }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" />
-                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: '#718096', fontSize: 10 }} />
-                      <YAxis domain={['auto', 'auto']} stroke="#718096" width={35} tick={{ fontSize: 10 }} />
-                      <Tooltip content={() => null} cursor={{ stroke: '#a0aec0', strokeWidth: 1 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
+                      <YAxis domain={['auto', 'auto']} stroke="var(--text-secondary)" width={35} tick={{ fontSize: 10 }} />
+                      <Tooltip content={() => null} cursor={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }} />
                       <Line 
                         type="monotone" 
                         dataKey="value" 
@@ -259,8 +259,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         }
                       }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#2d3748" vertical={false} />
-                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: '#718096', fontSize: 10 }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} />
                       
                       <YAxis 
                         type="number" 
@@ -273,12 +273,12 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                           if (val === 1) return 'Deep';
                           return '';
                         }}
-                        stroke="#718096" 
+                        stroke="var(--text-secondary)" 
                         width={50}
-                        tick={{ fontSize: 11, fontWeight: 'bold' }}
+                        tick={{ fontSize: 11, fontWeight: 'bold', fill: 'var(--text-secondary)' }}
                       />
                       
-                      <Tooltip content={() => null} cursor={{ stroke: 'white', strokeWidth: 2 }} />
+                      <Tooltip content={() => null} cursor={{ stroke: 'var(--text-primary)', strokeWidth: 2 }} />
 
                       {/* 1. Deep (Green) */}
                       <Area
@@ -324,11 +324,11 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             </div>
 
             <div style={{ 
-              backgroundColor: '#2d3748', padding: '10px 15px', 
-              borderRadius: '0 0 8px 8px', borderTop: '1px solid #4a5568',
+              backgroundColor: 'var(--bg-secondary)', padding: '10px 15px', 
+              borderRadius: '0 0 8px 8px', borderTop: '1px solid var(--border-color)',
               display: 'flex', alignItems: 'center', gap: '10px'
             }}>
-              <span style={{ fontSize: '0.8em', color: '#a0aec0' }}>History:</span>
+              <span style={{ fontSize: '0.8em', color: 'var(--text-secondary)' }}>History:</span>
               <input
                 type="range"
                 min={0}
