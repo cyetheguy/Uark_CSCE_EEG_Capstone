@@ -211,3 +211,4 @@ __marimo__/
 # Files that shouldn't be added but may be
 node_modules/
 *.usr
+*.eeg

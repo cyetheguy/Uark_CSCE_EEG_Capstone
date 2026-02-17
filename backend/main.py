@@ -13,7 +13,8 @@ import matplotlib.pyplot as plt
 # Import your existing custom modules
 import debug
 from debug import printDebug
-from crypto_usr_test import authenticate, create_user_file
+import crypto_ops
+from crypto_ops import authenticate, create_usr_file
 # Parser migration: Modbus RDF parsing moved from frontend to backend
 from modbus_parser import parse_modbus_data
 import glob
@@ -42,22 +43,6 @@ def get_edf_file_for_user(username: str) -> Path:
     if edf_files:
         return edf_files[0]
     raise FileNotFoundError("No EDF files in sessions directory")
-
-def username_exists(username: str) -> bool:
-    """Check if a username already exists by checking .USR filenames"""
-    if not USER_DIR.exists():
-        return False
-    
-    # Check if a file with this username exists (case-insensitive)
-    username_lower = username.lower()
-    usr_files = glob.glob(str(USER_DIR / "*.USR"))
-    
-    for file_path in usr_files:
-        file_username = Path(file_path).stem.lower()
-        if file_username == username_lower:
-            return True
-    
-    return False
 
 def read_edf_header(fh):
     """Read EDF header"""
@@ -225,7 +210,7 @@ def login():
 
     printDebug(f"Verification: {authenticate(username, password)}")
     if authenticate(username, password):
-        return jsonify({"success": 1, "message": "Login successful"}), 200
+        return jsonify({"success": 1, "message": "Login successful", "sessions": crypto_ops.decrypt_sessions()}), 200
     else:
         return jsonify({"success": 0, "message": "Invalid credentials"}), 200
 
@@ -246,24 +231,21 @@ def create_account():
     if not password or len(password) < 6:
         return jsonify({"success": False, "error": "Password must be at least 6 characters"}), 400
     
-    # Check if username already exists
-    if username_exists(username):
-        return jsonify({"success": False, "error": "Username already exists"}), 400
-    
     try:
-        # Ensure user directory exists
-        USER_DIR.mkdir(exist_ok=True)
-        
-        # Create the .USR file - use absolute path
-        filename = str(USER_DIR / f"{username}.USR")
-        create_user_file(username, password, filename)
-        
-        printDebug(f"Created user file: {filename}")
-        
-        return jsonify({
+        success:bool = create_usr_file(username, password)
+        print(success)
+        if (success):
+            printDebug(f"Created user file: {username}")
+            print("Got Here")
+            return jsonify({
             "success": True,
-            "message": f"Account '{username}' created successfully"
-        }), 200
+            "message": f"Account '{username}' created successfully"}), 200
+        else:
+            print("IDK")
+            return jsonify({
+                "success": False,
+                "message": f"Account '{username}' already exists"
+            }), 200
         
     except Exception as e:
         printDebug(f"Error creating account: {e}")
