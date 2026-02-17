@@ -5,6 +5,7 @@ interface HeaderProps {
   mode: 'live' | 'review';
   onModeChange: (mode: 'live' | 'review') => void;
   onShowSettings: () => void;
+  onScanDebug: () => void;
   onLogout: () => void;
 }
 
@@ -13,6 +14,7 @@ const Header: React.FC<HeaderProps> = ({
   mode,
   onModeChange,
   onShowSettings,
+  onScanDebug,
   onLogout
 }) => {
   return (
@@ -43,6 +45,13 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
       <div className="header-right">
+        <button
+          onClick={onScanDebug}
+          className="settings-button"
+          title="Send debug scan to device"
+        >
+          🔍 Scan (Debug)
+        </button>
         <button 
           onClick={onShowSettings}
           className="settings-button"

@@ -1,4 +1,7 @@
 @echo off
+setlocal enabledelayedexpansion
+set DEBUG_MODE=0
+
 :: Iterate through all arguments passed to the script
 for %%a in (%*) do (
     if "%%a"=="--update" (
@@ -32,6 +35,9 @@ for %%a in (%*) do (
 		cd ..
 
 		exit
+    )
+    if "%%a"=="--debug" (
+        set DEBUG_MODE=1
     )
 )
 
@@ -91,16 +97,33 @@ if not exist "frontend\node_modules" (
     echo.
 )
 
-:: Echo the final starting message with all original arguments
+:: Print startup banner
 echo.
 echo ========================================
-echo Starting EEG Application...
+if !DEBUG_MODE!==1 (
+    echo Starting EEG Application  [DEBUG MODE]
+) else (
+    echo Starting EEG Application...
+)
 echo ========================================
 echo.
 
 :: Start backend in a new window
 start "EEG Backend" cmd /k %PYTHON_CMD% backend\main.py %*
 
-:: Start frontend in current window
+:: NOTE: The Desktop client (main.exe) is now launched automatically by the
+:: Python backend on startup. Its output appears in the "EEG Backend" window.
+:: No separate client window needed.
+
+:: Start frontend — pass VITE_DEBUG_MODE so the UI can show the Scan button
 cd frontend
+if !DEBUG_MODE!==1 goto start_debug_frontend
 call npm run dev
+goto end
+
+:start_debug_frontend
+echo DEBUG MODE: Scan button will be visible after login.
+set VITE_DEBUG_MODE=true
+call npm run dev
+
+:end
