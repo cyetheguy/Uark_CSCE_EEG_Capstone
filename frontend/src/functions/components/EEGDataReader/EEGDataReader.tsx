@@ -5,8 +5,20 @@
 
 // Timestamps show actual data collection time
 // Data updates automatically via WebSocket (Maybe Bluetooth goes to .csv file first?)
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import './EEGDataReader.css';
+
+/** Design size for scale-to-fit; entire UI scales to fit window so all aspects stay visible at any size/zoom. */
+const DESIGN_WIDTH = 1600;
+const DESIGN_HEIGHT = 1000;
+
+function getViewportScale(): number {
+  if (typeof window === 'undefined') return 1;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (w <= 0 || h <= 0) return 1;
+  return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
+}
 
 // Components
 import LoginScreen from './components/LoginScreen';
@@ -28,6 +40,15 @@ import { useUpdates } from './hooks/useUpdates';
 import { SleepStats } from './types';
 
 const EEGDataReader: React.FC = () => {
+  // Scale-to-fit: keep entire UI visible at any window size or zoom
+  const [scale, setScale] = useState(getViewportScale);
+  useLayoutEffect(() => {
+    const updateScale = () => setScale(getViewportScale());
+    updateScale();
+    window.addEventListener('resize', updateScale);
+    return () => window.removeEventListener('resize', updateScale);
+  }, []);
+
   // State
   const [mode, setMode] = useState<'live' | 'review'>('live'); // Default to live mode for EDF streaming
   const [showSettings, setShowSettings] = useState(false);
@@ -179,26 +200,32 @@ const EEGDataReader: React.FC = () => {
     });
   };
 
-  // Render Login Screen (inside 16:9 viewport)
+  // Scale-to-fit wrapper so all aspects stay visible at any screen size or zoom
+  const viewportStyle = { transform: `scale(${scale})` };
+
+  // Render Login Screen (inside scaled viewport)
   if (!auth.isAuthenticated) {
     return (
-      <div className="eeg-app-viewport">
-        <LoginScreen
-          username={auth.username}
-          password={auth.password}
-          loginError={auth.loginError}
-          isLoading={auth.isLoading}
-          onUsernameChange={auth.setUsername}
-          onPasswordChange={auth.setPassword}
-          onLogin={auth.handleLogin}
-        />
+      <div className="eeg-app-scale-wrapper">
+        <div className="eeg-app-viewport" style={viewportStyle}>
+          <LoginScreen
+            username={auth.username}
+            password={auth.password}
+            loginError={auth.loginError}
+            isLoading={auth.isLoading}
+            onUsernameChange={auth.setUsername}
+            onPasswordChange={auth.setPassword}
+            onLogin={auth.handleLogin}
+          />
+        </div>
       </div>
     );
   }
 
-  // Render Main Application (full-width, pre-16:9 layout)
+  // Render Main Application (inside scaled viewport)
   return (
-    <div className="eeg-app-viewport">
+    <div className="eeg-app-scale-wrapper">
+      <div className="eeg-app-viewport" style={viewportStyle}>
       <div className="app-container">
         {showSettings && (
           <SettingsScreen
@@ -321,6 +348,7 @@ const EEGDataReader: React.FC = () => {
         </main>
 
         <Footer mode={mode} />
+      </div>
       </div>
     </div>
   );

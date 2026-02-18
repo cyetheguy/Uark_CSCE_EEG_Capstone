@@ -244,18 +244,26 @@
   color: var(--text-primary);
 }
 
-/* 16:9 viewport wrapper – login screen only */
-.eeg-app-viewport {
-  /* Slightly taller than 16:9 to reduce the need for scrolling */
-  aspect-ratio: 16 / 10;
-  width: min(100vw, calc(100vh * 16 / 10));
-  height: min(100vh, calc(100vw * 10 / 16));
-  max-width: 100%;
-  max-height: 100%;
+/* Scale-to-fit wrapper: fills viewport so entire UI is visible at any size/zoom */
+.eeg-app-scale-wrapper {
   position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary, #0b1220);
+}
+
+/* Fixed design size (16:10); scale is applied via inline transform from JS */
+.eeg-app-viewport {
+  width: 1600px;
+  height: 1000px;
+  flex-shrink: 0;
+  transform-origin: center center;
   overflow: hidden;
   display: flex;
   flex-direction: column;
