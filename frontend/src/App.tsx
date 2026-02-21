@@ -1,18 +1,3 @@
-// import React from 'react';
-// import './App.css';
-// import SolidPodListener from './functions/SolidPodListener';
-
-// const App: React.FC = () => {
-//   return (
-//     <div className="App">
-//       <SolidPodListener />
-//     </div>
-//   );
-// };
-
-// export default App;
-
-
 import React from 'react';
 import './App.css';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';

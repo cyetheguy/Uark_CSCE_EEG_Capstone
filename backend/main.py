@@ -21,8 +21,6 @@ import debug
 from debug import printDebug
 import crypto_ops
 from crypto_ops import authenticate, create_usr_file
-# Parser migration: Modbus RDF parsing moved from frontend to backend
-from modbus_parser import parse_modbus_data
 import glob
 
 # ── Bluetooth (Desktop subprocess) hex capture ───────────────────────────────
@@ -385,34 +383,6 @@ def create_account():
         import traceback
         traceback.print_exc()
         return jsonify({"success": False, "error": f"Failed to create account: {str(e)}"}), 500
-
-
-# Parser migration: endpoint for frontend to send raw RDF content and get parsed Modbus data
-@app.route('/api/modbus/parse', methods=['POST'])
-def api_modbus_parse():
-    """
-    Frontend sends the raw content from Solid Pod; backend does the parsing.
-    """
-    try:
-        data = request.get_json()
-        if data is None:
-            return jsonify({"error": "Request body must be JSON"}), 400
-
-        content = data.get("content")
-        if content is None:
-            return jsonify({"error": "Missing 'content' in request body"}), 400
-
-        if not isinstance(content, str):
-            return jsonify({"error": "'content' must be a string"}), 400
-
-        result = parse_modbus_data(content)
-        return jsonify(result), 200
-
-    except Exception as e:
-        printDebug(f"Error in /api/modbus/parse: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
 
 
 def iter_edf_samples_continuously(edf_path, channel_idx=0):

@@ -15,7 +15,7 @@ export const prepareChartData = (data: DataPoint[]): ChartDataPoint[] => {
       : `Slider ${(data as any).sliderId}`,
     type: data.dataType,
     deviceId: data.deviceId || 'unknown',
-    source: data.source || 'solid-pod',
+    source: data.source || 'csv',
     fullTimestamp: data.timestamp,
     originalTime: data.timestamp.toLocaleString(),
     register: (data as any).register,
@@ -32,7 +32,7 @@ export const formatTooltip = (value: number, name: string, props: any) => {
         <p><strong>Value:</strong> {value}</p>
         <p><strong>Time:</strong> {data.originalTime}</p>
         <p><strong>Device:</strong> {data.deviceId}</p>
-        <p><strong>Source:</strong> {data.source === 'csv' ? 'CSV Simulation' : 'Solid Pod'}</p>
+        <p><strong>Source:</strong> {data.source === 'csv' ? 'CSV Simulation' : 'Local'}</p>
         <p><strong>Type:</strong> {data.type}</p>
         {data.type === 'modbus' && (
           <p><strong>Register:</strong> {data.register}</p>
@@ -69,9 +69,9 @@ export const groupDataBySource = (data: DataPoint[]): Record<string, DataPoint[]
   const groupedData: Record<string, DataPoint[]> = {};
   
   data.forEach(item => {
-    const source = item.source === 'csv' 
-      ? `CSV: ${item.deviceId || 'unknown'}` 
-      : `Solid Pod: ${item.deviceId || 'unknown'}`;
+    const source = item.source === 'csv'
+      ? `CSV: ${item.deviceId || 'unknown'}`
+      : `Local: ${item.deviceId || 'unknown'}`;
     if (!groupedData[source]) {
       groupedData[source] = [];
     }

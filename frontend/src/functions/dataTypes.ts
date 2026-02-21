@@ -10,7 +10,7 @@ export interface BaseDataPoint {
   value: number;
   timestamp: Date;
   deviceId?: string; // Optional property
-  source?: 'solid-pod' | 'csv' | 'mqtt';
+  source?: 'csv' | 'mqtt';
 }
 
 // Data format that comes from RDF/Modbus readings
@@ -38,7 +38,7 @@ export interface ChartDataPoint {
   name: string;                    // Display name (e.g., "Register 0" or "Slider 1")
   type: 'modbus' | 'slider';      // Original data type
   deviceId: string;               // Device identifier
-  source: string;                 // Data source ('solid-pod', 'csv', 'mqtt')
+  source: string;                 // Data source ('csv', 'mqtt')
   fullTimestamp: Date;            // Original timestamp
   originalTime: string;           // Formatted timestamp for tooltips
   // Optional fields based on data type

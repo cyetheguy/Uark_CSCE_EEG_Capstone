@@ -1,122 +1,25 @@
-import { getFile } from '@inrupt/solid-client';
-import { getDefaultSession } from '@inrupt/solid-client-authn-browser';
-import { parseSliderData } from '../parsers/sliderParser';
-import { DataPoint, ModbusData, SliderData, isModbusData, isSliderData } from '../dataTypes';
+import { DataPoint, ModbusData, SliderData } from '../dataTypes';
 
-const baseURI = import.meta.env.VITE_BASE_URI;
-// Parser migration: backend URL for Modbus parse API
-const backendUrl = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:5000';
-
-// Fetches data from Solid Pod using Solid client library
-// User can choose between different data sources 
-// Handles authentication and file retrieval
+// CSV and local data only (Solid Pod functionality removed)
 
 export class DataService {
-  private session = getDefaultSession();
   private csvData: DataPoint[] = [];
-
-  async fetchModbusData(podName: string): Promise<ModbusData[]> {
-    try {
-      const modbusFile = await getFile(
-        `${baseURI}/${podName}/modbus/`,
-        { fetch: this.session.fetch }
-      );
-
-      if (modbusFile) {
-        const content = await modbusFile.text();
-        // Parser migration: send raw content to backend instead of parseModbusData(content)
-        const response = await fetch(`${backendUrl}/api/modbus/parse`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-        });
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({ error: response.statusText }));
-          throw new Error(err.error ?? `Backend error ${response.status}`);
-        }
-        const raw: Array<{ timestamp: string; [key: string]: unknown }> = await response.json();
-        // Parser migration: backend returns ISO timestamps; convert to Date for frontend
-        return raw.map((item) => ({
-          ...item,
-          timestamp: new Date(item.timestamp),
-        })) as ModbusData[];
-      }
-    } catch (modbusError) {
-      console.error('Error fetching modbus data:', modbusError);
-      throw modbusError;
-    }
-
-    return [];
-  }
-
-  async fetchSliderData(podName: string): Promise<SliderData[]> {
-    try {
-      const sliderFile = await getFile(
-        `${baseURI}/${podName}/modbus`,
-        { fetch: this.session.fetch }
-      );
-      
-      if (sliderFile) {
-        const content = await sliderFile.text();
-        return parseSliderData(content);
-      }
-    } catch (sliderError) {
-      console.error('Error fetching slider data:', sliderError);
-      throw sliderError;
-    }
-    
-    return [];
-  }
-
-  async fetchAllData(podName: string, dataType: 'modbus' | 'slider' | 'both'): Promise<DataPoint[]> {
-    const allData: DataPoint[] = [];
-    
-    if (dataType === 'both' || dataType === 'modbus') {
-      try {
-        const modbusData = await this.fetchModbusData(podName);
-        allData.push(...modbusData);
-      } catch (error) {
-        console.error('Failed to fetch modbus data:', error);
-        // Don't throw - continue to try fetching slider data
-      }
-    }
-
-    if (dataType === 'both' || dataType === 'slider') {
-      try {
-        const sliderData = await this.fetchSliderData(podName);
-        allData.push(...sliderData);
-      } catch (error) {
-        console.error('Failed to fetch slider data:', error);
-      }
-    }
-
-    // Add CSV data if loaded
-    if (this.csvData.length > 0) {
-      const filteredCSVData = this.csvData.filter(item => {
-        if (dataType === 'both') return true;
-        return item.dataType === dataType;
-      });
-      allData.push(...filteredCSVData);
-    }
-
-    return allData;
-  }
 
   async loadCSVData(filepath: string): Promise<DataPoint[]> {
     try {
       const response = await fetch(filepath);
       const text = await response.text();
-      
+
       const lines = text.split('\n').slice(1); // Skip header
       const dataPoints: DataPoint[] = [];
-      
+
       lines.forEach((line) => {
         if (line.trim()) {
           const columns = line.split(',');
           if (columns.length < 6) return; // Skip incomplete lines
-          
+
           const [timestamp, deviceId, dataType, registerStr, valueStr, func] = columns;
-          
+
           // Create base data point
           const baseDataPoint = {
             value: parseInt(valueStr) || 0,
@@ -124,9 +27,9 @@ export class DataService {
             deviceId: deviceId,
             source: 'csv' as const
           };
-          
+
           let dataPoint: DataPoint;
-          
+
           if (dataType === 'modbus') {
             dataPoint = {
               ...baseDataPoint,
@@ -145,15 +48,14 @@ export class DataService {
             console.warn(`Unknown data type in CSV: ${dataType}`);
             return;
           }
-          
+
           dataPoints.push(dataPoint);
         }
       });
-      
+
       this.csvData = dataPoints;
       console.log(`Loaded ${dataPoints.length} data points from CSV`);
       return dataPoints;
-      
     } catch (error) {
       console.error('Error loading CSV data:', error);
       return [];
@@ -168,18 +70,17 @@ export class DataService {
     this.csvData = [];
   }
 
-  getDataSummary(): { total: number, modbus: number, slider: number, csv: number } {
+  getDataSummary(): { total: number; modbus: number; slider: number; csv: number } {
     return {
       total: this.csvData.length,
-      modbus: this.csvData.filter(d => d.dataType === 'modbus').length,
-      slider: this.csvData.filter(d => d.dataType === 'slider').length,
+      modbus: this.csvData.filter((d) => d.dataType === 'modbus').length,
+      slider: this.csvData.filter((d) => d.dataType === 'slider').length,
       csv: this.csvData.length
     };
   }
 
-  // Helper method to get filtered CSV data
   getFilteredCSVData(dataType: 'modbus' | 'slider' | 'both'): DataPoint[] {
     if (dataType === 'both') return this.csvData;
-    return this.csvData.filter(item => item.dataType === dataType);
+    return this.csvData.filter((item) => item.dataType === dataType);
   }
 }

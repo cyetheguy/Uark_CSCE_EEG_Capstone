@@ -89,7 +89,7 @@ const DeviceChart: React.FC<DeviceChartProps> = ({
             gap: '0.5rem',
             color: '#000'
           }}>
-            {/* Display the Pod/ CSV file name */}
+            {/* Display the data source / CSV file name */}
             {title} 
           </h3>
           <div style={{ 
@@ -106,7 +106,7 @@ const DeviceChart: React.FC<DeviceChartProps> = ({
               borderRadius: '4px',
               border: `1px solid ${isCSV ? '#c3e6cb' : '#bee5eb'}`
             }}>
-              {isCSV ? 'CSV Simulation' : 'Solid Pod'}
+              {isCSV ? 'CSV Simulation' : 'Local'}
             </span>
             <span style={{
               padding: '0.125rem 0.5rem',

@@ -67,7 +67,7 @@ export const parseModbusData = (content: string): ModbusData[] => {
             function: func,
             accessed: accessed,
             deviceId: 'esp-device', // Default device ID - adjust as needed
-            source: 'solid-pod'
+            source: 'csv'
           };
           
           modbusData.push(modbusEntry);
