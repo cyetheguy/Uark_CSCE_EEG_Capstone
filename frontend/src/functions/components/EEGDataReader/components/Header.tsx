@@ -45,13 +45,15 @@ const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
       <div className="header-right">
-        <button
-          onClick={onScanDebug}
-          className="settings-button"
-          title="Send scan to device"
-        >
-          🔍 Scan
-        </button>
+        {mode === 'live' && (
+          <button
+            onClick={onScanDebug}
+            className="settings-button"
+            title="Send scan to device"
+          >
+            🔍 Scan
+          </button>
+        )}
         <button 
           onClick={onShowSettings}
           className="settings-button"

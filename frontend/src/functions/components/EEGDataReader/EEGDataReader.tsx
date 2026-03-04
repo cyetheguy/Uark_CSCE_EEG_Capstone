@@ -17,7 +17,8 @@ function getViewportScale(): number {
   const w = window.innerWidth;
   const h = window.innerHeight;
   if (w <= 0 || h <= 0) return 1;
-  return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
+  // Do not scale above 1 so the analyzer doesn't start overly zoomed-in on large displays
+  return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT, 1);
 }
 
 // Components
