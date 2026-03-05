@@ -167,12 +167,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           >
             Reset to Defaults
           </button>
-          <button 
-            onClick={onClose}
-            className="apply-settings-button"
-          >
-            Apply Settings
-          </button>
         </div>
       </div>
     </div>
