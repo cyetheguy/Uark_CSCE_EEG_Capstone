@@ -261,10 +261,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                       <Tooltip content={() => null} cursor={{ stroke: 'var(--text-primary)', strokeWidth: 2 }} />
 
                       {/* Horizontal stage bands (background) */}
-                      <ReferenceArea y1={0.5} y2={1.5} fill={STAGE_COLORS.deep} fillOpacity={0.25} isFront={false} />
-                      <ReferenceArea y1={1.5} y2={2.5} fill={STAGE_COLORS.rem} fillOpacity={0.25} isFront={false} />
-                      <ReferenceArea y1={2.5} y2={3.5} fill={STAGE_COLORS.light} fillOpacity={0.25} isFront={false} />
-                      <ReferenceArea y1={3.5} y2={4.5} fill={STAGE_COLORS.awake} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={0.5} y2={1.5} fill={settings.sleepStageColors['deep']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={1.5} y2={2.5} fill={settings.sleepStageColors['rem']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={2.5} y2={3.5} fill={settings.sleepStageColors['light']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={3.5} y2={4.5} fill={settings.sleepStageColors['awake']} fillOpacity={0.25} isFront={false} />
 
                       {/* Step line: discrete stage at each time */}
                       <Line
