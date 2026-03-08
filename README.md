@@ -55,5 +55,7 @@ This project was designed and developed by Team 17. The following are the names 
 <br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
 <br>&emsp;&emsp;Dylan Wilkins:&emsp;&emsp;&ensp;&ensp;[@DJW032](https://github.com/DJW032)
 <br>&emsp;&emsp;William Taylor:&emsp;&emsp;&ensp;&ensp;[@Will-Taylor08](https://github.com/Will-Taylor08)
+<br>&emsp;&emsp;Joey Leder:&emsp;&emsp;&ensp;&ensp;[@JoeyLeder](https://github.com/JoeyLeder)
+
 
 <br><br>(Edit) To see the full graph of contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
