@@ -160,6 +160,40 @@ const EEGDataReader: React.FC = () => {
     }
   };
 
+  const handleExportLiveSession = async () => {
+    if (!sleepData.selectedSession || !sleepData.selectedSession.channelData.length) {
+      updates.addUpdate('❌ No live data to export yet');
+      return;
+    }
+
+    updates.addUpdate('Exporting live session to CSV (backend/sessions)...');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/live/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: auth.username || 'demo',
+          sampling_rate: 100.0,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && (data as any)?.success) {
+        const name = (data as any).filename || 'unknown.csv';
+        updates.addUpdate(`✅ Live session exported as ${name}`);
+      } else {
+        const msg = (data as any)?.error || (data as any)?.message || `HTTP ${response.status}`;
+        updates.addUpdate(`❌ Export failed: ${msg}`);
+      }
+    } catch (error: any) {
+      updates.addUpdate(`❌ Export error: ${error?.message || String(error)}`);
+    }
+  };
+
   const handleClearData = () => {
     sleepData.setSleepSessions([]);
     sleepData.setSelectedSession(null);
@@ -299,6 +333,16 @@ const EEGDataReader: React.FC = () => {
                           return `${min.toFixed(2)} min`;
                         })()}</dd>
                       </dl>
+                      <div className="acquisition-actions">
+                        <button
+                          type="button"
+                          className="primary-button"
+                          onClick={handleExportLiveSession}
+                          disabled={!sleepData.selectedSession || !sleepData.selectedSession.channelData.length}
+                        >
+                          Export current live session (CSV)
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

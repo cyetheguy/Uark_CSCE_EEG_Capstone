@@ -7,6 +7,7 @@ import subprocess
 import threading
 import os
 import re
+import csv
 from collections import deque
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file
@@ -669,6 +670,60 @@ def get_bluetooth_samples():
         "samples": samples,
         "count": len(samples)
     }), 200
+
+
+@app.route('/api/live/export', methods=['POST'])
+def export_live_csv():
+    """Export current live BLE samples to a CSV file in the sessions directory."""
+    from datetime import datetime
+
+    try:
+        # Ensure sessions directory exists
+        if not SESSIONS_DIR.exists():
+            SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+        payload = request.get_json(silent=True) or {}
+        username = (payload.get("username") or "").strip()
+        filename = (payload.get("filename") or "").strip()
+        sampling_rate = float(payload.get("sampling_rate") or 100.0)
+
+        # Snapshot current samples under lock
+        with _bluetooth_samples_lock:
+            samples = list(_bluetooth_samples)
+
+        if not samples:
+            return jsonify({"success": False, "error": "No BLE samples available to export"}), 400
+
+        # Build safe default filename
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = username or "live"
+        base = re.sub(r"[^0-9a-zA-Z_-]+", "_", base)
+        default_name = f"{base}_session_{ts}.csv"
+        out_name = filename if filename else default_name
+
+        out_path = SESSIONS_DIR / out_name
+
+        # Write CSV: sample index, approximate time (sec), value
+        with open(out_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["sample_index", "time_sec", "value"])
+            for idx, value in enumerate(samples):
+                t_sec = idx / sampling_rate
+                writer.writerow([idx, f"{t_sec:.6f}", float(value)])
+
+        printDebug(f"Exported {len(samples)} BLE samples to {out_path}")
+        return jsonify({
+            "success": True,
+            "filename": out_path.name,
+            "path": str(out_path),
+            "samples": len(samples),
+        }), 200
+
+    except Exception as e:
+        printDebug(f"Error exporting live CSV: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/sessions/list', methods=['GET'])
 def list_sessions():
