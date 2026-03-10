@@ -75,6 +75,13 @@ ConnectionManager::ConnectionManager(){
     watcher.Stopped([this](BluetoothLEAdvertisementWatcher watcher, BluetoothLEAdvertisementWatcherStoppedEventArgs args){
         this->didCancelScanning();
     });
+
+    // Start background consumer that drains the internal message queue and
+    // writes characteristic values to stdout. This decouples BLE callbacks
+    // from I/O, following a producer–consumer (message queue) pattern.
+    sampleConsumerThread = std::thread([this]() {
+        this->consumeSampleQueue();
+    });
 };
 //Implement later to handle properly
 ConnectionManager::~ConnectionManager(){
@@ -461,11 +468,16 @@ void ConnectionManager::didDiscoverCharacteristicsForService(IVectorView<GattCha
 
 void ConnectionManager::didReadValueForCharacteristic(IBuffer value, GattCommunicationStatus status){
     if(status == GattCommunicationStatus::Success){
-        cout << "Value (02x hex): ";
+        // Build hex payload for the message queue (one message per notification)
+        std::string hexPayload;
+        hexPayload.reserve(value.Length() * 2);
         for(size_t i = 0; i < value.Length(); i++){
-            printf("%02x", value.data()[i]);
+            char buf[3];
+            std::snprintf(buf, sizeof(buf), "%02x", value.data()[i]);
+            hexPayload.append(buf);
         }
-        cout << endl;
+        // Enqueue for the background consumer to print as a log line.
+        sampleQueue.enqueue(hexPayload);
 
         printBufferAsString(value);
 
@@ -559,8 +571,8 @@ bool ConnectionManager::shouldConnectToDevice(const BluetoothLEAdvertisementRece
 
     //Ignore Apple devices Macs/Airtags/IPhones/IPads/Watches/etc
     for(auto const& mfg : args.Advertisement().ManufacturerData()){
-        if(mfg.CompanyId() == 0x004C){
-            return false;
+        if(mfg.CompanyId() == 0x041E){
+            return true;
         }
     }
 
@@ -583,4 +595,12 @@ bool ConnectionManager::isDesiredDevice(const IBuffer& value){
     }
     return false;
 
+}
+
+void ConnectionManager::consumeSampleQueue(){
+    while (true) {
+        // Blocks until a new hex payload is available
+        std::string hexPayload = sampleQueue.dequeue();
+        cout << "Value (02x hex): " << hexPayload << endl;
+    }
 }

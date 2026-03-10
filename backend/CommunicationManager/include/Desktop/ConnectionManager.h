@@ -20,6 +20,10 @@
 #include <string_view>
 #include <map>
 #include <memory>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -154,6 +158,29 @@ struct guid{
 
 };
 
+// Simple thread-safe queue for streaming messages from the BLE callbacks
+class SampleQueue {
+public:
+    void enqueue(const std::string& message) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(message);
+        cond_var_.notify_one();
+    }
+
+    std::string dequeue() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cond_var_.wait(lock, [this]() { return !queue_.empty(); });
+        std::string message = queue_.front();
+        queue_.pop();
+        return message;
+    }
+
+private:
+    std::queue<std::string> queue_;
+    std::mutex mutex_;
+    std::condition_variable cond_var_;
+};
+
 class ConnectionManager{
 
     public:
@@ -220,6 +247,7 @@ class ConnectionManager{
         bool isPheripheralNew(const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs& args);
         bool shouldConnectToDevice(const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs& args);
         bool isDesiredDevice(const winrt::Windows::Storage::Streams::IBuffer& value);
+        void consumeSampleQueue();
 
         std::vector<uint64_t> discoveredDeviceUUIDS;
         std::vector<winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs> discoveredDevices;
@@ -239,13 +267,17 @@ class ConnectionManager{
 
         uint32_t connectedDeviceIndex = 0;
         bool shouldReport = true;
-        int rssiSensitivity = 120;
+        int rssiSensitivity = 140;
 
         winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher watcher;
         //Have as a map to handle multiple characteristics of same type
         std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> subscribedWriteCharacteristics;
         std::unordered_map<uint64_t, std::unordered_set<winrt::guid>> subscribedNotifyCharacteristics;
         bool connecting = false;
+
+        // Queue and worker thread for streaming characteristic values as messages
+        SampleQueue sampleQueue;
+        std::thread sampleConsumerThread;
    
 };
 
