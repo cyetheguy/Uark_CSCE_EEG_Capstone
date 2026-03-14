@@ -5,7 +5,12 @@ set DEBUG_MODE=0
 :: Iterate through all arguments passed to the script
 for %%a in (%*) do (
     if "%%a"=="--update" (
-        echo update
+        echo updating
+        mkdir temp
+        git init
+        git clone https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone.git temp
+        xcopy temp .\ /E /I
+        rmdir /S /Q temp 
     )
     if "%%a"=="--install" (
         echo installing
