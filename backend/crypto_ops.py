@@ -1,6 +1,7 @@
 import os
 import json
 import glob
+from typing import Any, Dict, List, Optional
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
@@ -9,24 +10,22 @@ import random
 import string
 from debug import printDebug
 
+USR_KEY: Optional[bytes] = None
+all_usr: List[str] = glob.glob("backend/user/*.USR")
 
-USR_KEY:bytes = None
-all_usr: list[str] = glob.glob("backend/user/*.USR")
-
-def derive_key(password:str, salt:bytes) -> bytes:
-
-    # Returns SHA-256 key from password and salt
-
-    key = PBKDF2(password, salt, dkLen=32, count=200000, hmac_hash_module=SHA256)
+def derive_key(password: str, salt: bytes) -> bytes:
+    """Returns SHA-256 key from password and salt"""
+    key: bytes = PBKDF2(password, salt, dkLen=32, count=200000, hmac_hash_module=SHA256)
     return key
 
-def authenticate(input_username:str, input_password:str) -> bool:
+def authenticate(input_username: str, input_password: str) -> bool:
+    """
+    Returns True  | authentication passed, global key established
+    Returns False | authentication failed, global key not changed
+    """
     global USR_KEY
     global all_usr
 
-    # Returns True  | authentication passed, global key established
-    # Returns False | authentication failed, global key not changed
-    
     if not all_usr:
         printDebug("[!] No .USR files found.")
         return False
@@ -34,21 +33,21 @@ def authenticate(input_username:str, input_password:str) -> bool:
     for file_path in all_usr:
         try:
             with open(file_path, "rb") as f:
-                salt:bytes = f.read(16)
-                nonce:bytes = f.read(16)
-                tag:bytes = f.read(16)
-                ciphertext:bytes = f.read()
+                salt: bytes = f.read(16)
+                nonce: bytes = f.read(16)
+                tag: bytes = f.read(16)
+                ciphertext: bytes = f.read()
 
-            candidate_key:bytes = derive_key(input_password, salt)
+            candidate_key: bytes = derive_key(input_password, salt)
 
             # Initialize AES with the derived key
             cipher = AES.new(candidate_key, AES.MODE_GCM, nonce=nonce)
             
             # Decrypt and Verify
-            decrypted_bytes:bytes = cipher.decrypt_and_verify(ciphertext, tag)
+            decrypted_bytes: bytes = cipher.decrypt_and_verify(ciphertext, tag)
             
             # Decode and check username
-            user_data: dict[str, Any] = json.loads(decrypted_bytes.decode('utf-8'))
+            user_data: Dict[str, Any] = json.loads(decrypted_bytes.decode('utf-8'))
             
             if user_data.get("username") == input_username:
                 USR_KEY = candidate_key
@@ -59,56 +58,61 @@ def authenticate(input_username:str, input_password:str) -> bool:
             continue
     return False
 
-def create_usr_file(username:str, password:str) -> bool:
+def create_usr_file(username: str, password: str) -> bool:
+    """
+    Returns True  | file was created
+    Returns False | file was not created
+    """
     global all_usr
 
-    # Returns True  | file was created
-    # Returns False | file was not created
-
     # Verify that no usr currently exists
-    if(authenticate(username, password)):
+    if authenticate(username, password):
         return False
     
     # Filename creation
-    filename:str = None
-    while(True):
-        filename = "".join(random.choice(string.ascii_letters) for i in range (8))
-        filename.join(".USR")
-        if filename not in all_usr:
+    filename: str = ""
+    while True:
+        filename = "".join(random.choice(string.ascii_letters) for i in range(8))
+        if f"backend/user/{filename}.USR" not in all_usr:
             break
 
-
     # Salt creation
-    salt:bytes = get_random_bytes(16)
+    salt: bytes = get_random_bytes(16)
     
     # Get key from password and salt
-    key:bytes = derive_key(password, salt)
+    key: bytes = derive_key(password, salt)
     
     # Encrypt username and info
-    data:bytes = json.dumps({"username": username, "bio": "Top Secret Data"}).encode('utf-8')
+    data: bytes = json.dumps({"username": username, "bio": "Top Secret Data"}).encode('utf-8')
     cipher = AES.new(key, AES.MODE_GCM)
-    nonce:bytes = cipher.nonce
+    nonce: bytes = cipher.nonce
     ciphertext, tag = cipher.encrypt_and_digest(data)
     
     # Write: Salt + Nonce + Tag + Ciphertext
     with open(f"backend/user/{filename}.USR", "wb") as f:
         f.write(salt + nonce + tag + ciphertext)
         
-    printDebug(f"[Setup] Created salted file '{filename}' for user '{username}'")
+    printDebug(f"[Setup] Created salted file '{filename}.USR' for user '{username}'")
+    
+    # Refresh the global list of users
+    all_usr = glob.glob("backend/user/*.USR")
     return True
 
-def encrypt_session(session:dict) -> bool:
+def encrypt_session(session: Dict[str, Any]) -> bool:
+    """Encrypts a dictionary payload to an .eeg file using the active USR_KEY"""
     global USR_KEY
+    if USR_KEY is None:
+        printDebug("[!] Cannot encrypt: No USR_KEY established.")
+        return False
 
-    # Generate Filename from filetype <- MAKE SURE FILENAMES DON'T OVERLAP
-    date_info = session['Time']
+    date_info: str = session.get('Time', 'unknown_time')
 
     # Create encoded JSON byte string
-    data:bytes = json.dumps(session).encode('utf-8')
+    data: bytes = json.dumps(session).encode('utf-8')
 
     # AES encryption
     cipher = AES.new(USR_KEY, AES.MODE_GCM)
-    nonce:bytes = cipher.nonce
+    nonce: bytes = cipher.nonce
     ciphertext, tag = cipher.encrypt_and_digest(data)
 
     # Write file to /backend/sessions/
@@ -116,30 +120,56 @@ def encrypt_session(session:dict) -> bool:
         f.write(nonce + tag + ciphertext)
     return True
 
-def decrypt_sessions() -> list[str]:
+def list_user_sessions() -> List[str]:
+    """Returns a list of .eeg filenames that the current user can successfully decrypt."""
     global USR_KEY
+    valid_lists: List[str] = []
+    
+    if USR_KEY is None:
+        return valid_lists
 
-    # all files created from user will show up in this list
-    valid_lists: list[str] = []
-
-    for filename in glob.glob("backend/sessions/*.eeg"):
-        with open(filename, "rb") as f:
-            nonce:bytes = f.read(16)
-            tag:bytes = f.read(16)
-            ciphertext:bytes = f.read()
+    for filepath in glob.glob("backend/sessions/*.eeg"):
+        with open(filepath, "rb") as f:
+            nonce: bytes = f.read(16)
+            tag: bytes = f.read(16)
+            ciphertext: bytes = f.read()
             cipher = AES.new(USR_KEY, AES.MODE_GCM, nonce=nonce)
             try: 
                 cipher.decrypt_and_verify(ciphertext, tag)
-                valid_lists.append(filename)
+                valid_lists.append(os.path.basename(filepath))
             except:
                 continue
     return valid_lists
-        
 
+def decrypt_session(filename: str) -> Dict[str, Any]:
+    """
+    Reads, decrypts, and decodes a specific .eeg file using the active USR_KEY.
+    Returns the parsed JSON dictionary.
+    """
+    global USR_KEY
+    if USR_KEY is None:
+        raise PermissionError("No active user session (USR_KEY is None).")
+    
+    filepath: str = filename if filename.startswith("backend/sessions/") else f"backend/sessions/{filename}"
 
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"Session file not found: {filepath}")
+
+    with open(filepath, "rb") as f:
+        nonce: bytes = f.read(16)
+        tag: bytes = f.read(16)
+        ciphertext: bytes = f.read()
+
+    cipher = AES.new(USR_KEY, AES.MODE_GCM, nonce=nonce)
+    
+    try:
+        decrypted_bytes: bytes = cipher.decrypt_and_verify(ciphertext, tag)
+        session_data: Dict[str, Any] = json.loads(decrypted_bytes.decode('utf-8'))
+        return session_data
+    except Exception as e:
+        raise ValueError(f"Failed to decrypt {filepath}. Key mismatch or corrupted file. Error: {e}")
 
 if __name__ == "__main__":
-
     print("\n--- Front End Login ---")
     user_in = input("Enter Username: ")
     pass_in = input("Enter Password: ")
@@ -154,14 +184,16 @@ if __name__ == "__main__":
         exit()
 
     test_data = {
-    "name": "John Doe",
-    "Time": "260117_1225",
-    "is_employed": True,
-    "hobbies": ["coding", "reading", "gaming"],
-    "address": {
-        "street": "123 Main St",
-        "city": "Anytown"
-    }}
+        "name": "John Doe",
+        "Time": "260117_1225",
+        "is_employed": True,
+        "hobbies": ["coding", "reading", "gaming"],
+        "address": {
+            "street": "123 Main St",
+            "city": "Anytown"
+        }
+    }
 
     encrypt_session(test_data)
-    print(decrypt_sessions())
+    print(f"Readable Sessions: {list_user_sessions()}")
+    print(f"Decrypted Test Session: {decrypt_session('260117_1225.eeg')}")

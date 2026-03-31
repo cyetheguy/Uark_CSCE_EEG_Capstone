@@ -29,8 +29,14 @@ def login() -> Tuple[Response, int]:
     data: Dict[str, Any] = request.get_json() or {}
     username: str = data.get('username', '')
     password: str = data.get('password', '')
+    
     if crypto_ops.authenticate(username, password):
-        return jsonify({"success": 1, "message": "Login successful", "sessions": crypto_ops.decrypt_sessions()}), 200
+        return jsonify({
+            "success": 1, 
+            "message": "Login successful", 
+            "sessions": crypto_ops.list_user_sessions()
+        }), 200
+    return jsonify({"success": 0, "message": "Invalid credentials"}), 200
     return jsonify({"success": 0, "message": "Invalid credentials"}), 200
 
 @app.route('/api/create-account', methods=['POST'])

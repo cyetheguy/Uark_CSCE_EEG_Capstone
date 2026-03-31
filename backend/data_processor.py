@@ -14,6 +14,8 @@ import matplotlib
 matplotlib.use('Agg')  # Use non-GUI backend for server
 import matplotlib.pyplot as plt
 
+import crypto_ops
+
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
 
@@ -216,6 +218,7 @@ def export_csv(samples: List[float], username: str, filename: str, sampling_rate
         writer.writerow(["sample_index", "time_sec", "value"])
         for idx, value in enumerate(samples):
             writer.writerow([idx, f"{idx / sampling_rate:.6f}", float(value)])
+
             
     return out_path.name, str(out_path)
 
@@ -371,3 +374,24 @@ def generate_plot_stream(live: bool, username: str, get_ble_samples_cb: Optional
         time.sleep(PLOT_UPDATE_INTERVAL)
         if update_count > 36000: 
             break
+
+def save_eeg(samples: List[float], username: str, sampling_rate: float = 100.0) -> str:
+    """Packages live EEG samples and encrypts them using crypto_ops."""
+    ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_data: Dict[str, Any] = {
+        "username": username,
+        "Time": ts,
+        "sampling_rate": sampling_rate,
+        "samples": samples
+    }
+    
+    success: bool = crypto_ops.encrypt_session(session_data)
+    if not success:
+        raise RuntimeError("Encryption failed during save_eeg. User may not be logged in.")
+        
+    return f"{ts}.eeg"
+
+def load_eeg(filename: str) -> Dict[str, Any]:
+    """Loads and decrypts an .eeg file through crypto_ops."""
+
+    return crypto_ops.decrypt_session(filename)
