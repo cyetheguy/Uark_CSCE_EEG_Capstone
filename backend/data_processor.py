@@ -15,12 +15,16 @@ matplotlib.use('Agg')  # Use non-GUI backend for server
 import matplotlib.pyplot as plt
 
 import crypto_ops
+from debug import printDebug
 
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
 
 WINDOW_SECONDS: int = 60
 PLOT_UPDATE_INTERVAL: float = 0.1
+
+
+# ─── EDF PARSING AND MATH ────────────────────────────────────────────────────────
 
 def get_edf_file_for_user(username: str) -> Path:
     """Return which EDF file to use for this user (demo vs admin)."""
@@ -146,6 +150,9 @@ def iter_edf_samples_continuously(edf_path: str, channel_idx: int = 0) -> Genera
                 yield float(scale * value + offset)
             record_idx += 1
 
+
+# ─── PLOTTING AND STREAMING ──────────────────────────────────────────────────────
+
 def generate_eeg_plot(samples: np.ndarray | List[float], sfreq: float, channel_label: str, time_start_sec: float = 0.0) -> io.BytesIO:
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     fig.suptitle(f'EEG Analysis - {channel_label}', fontsize=14, fontweight='bold')
@@ -203,117 +210,6 @@ def stream_edf_data(edf_file: Path) -> Generator[str, None, None]:
         time.sleep(0.01)
         if elapsed > 3600: 
             break
-
-def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float) -> Tuple[str, str]:
-    if not SESSIONS_DIR.exists(): 
-        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    import re
-    ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base: str = re.sub(r"[^0-9a-zA-Z_-]+", "_", username or "live")
-    out_name: str = filename if filename else f"{base}_session_{ts}.csv"
-    out_path: Path = SESSIONS_DIR / out_name
-
-    with open(out_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["sample_index", "time_sec", "value"])
-        for idx, value in enumerate(samples):
-            writer.writerow([idx, f"{idx / sampling_rate:.6f}", float(value)])
-
-            
-    return out_path.name, str(out_path)
-
-def get_all_sessions_info() -> List[Dict[str, str]]:
-    if not SESSIONS_DIR.exists(): 
-        return []
-    edf_files: List[Path] = sorted(SESSIONS_DIR.glob("*.edf"))
-    sessions: List[Dict[str, str]] = []
-    
-    for path in edf_files:
-        try:
-            startdate, starttime, duration_sec = get_edf_start_and_duration(path)
-            parts_d: List[str] = startdate.split(".")
-            parts_t: List[str] = starttime.split(".")
-            day: int = int(parts_d[0]) if len(parts_d) >= 1 and parts_d[0].strip().isdigit() else 1
-            month: int = int(parts_d[1]) if len(parts_d) >= 2 and parts_d[1].strip().isdigit() else 1
-            yy: int = int(parts_d[2]) if len(parts_d) >= 3 and parts_d[2].strip().isdigit() else 0
-            year: int = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
-            hour: int = int(parts_t[0]) if len(parts_t) >= 1 and parts_t[0].strip().isdigit() else 0
-            min_: int = int(parts_t[1]) if len(parts_t) >= 2 and parts_t[1].strip().isdigit() else 0
-            sec: int = int(parts_t[2]) if len(parts_t) >= 3 and parts_t[2].strip().isdigit() else 0
-            start_dt: datetime = datetime(year, month, day, hour, min_, sec)
-            end_dt: datetime = datetime.fromtimestamp(start_dt.timestamp() + duration_sec)
-            
-            start_iso: str = start_dt.isoformat() + "Z"
-            end_iso: str = end_dt.isoformat() + "Z"
-            date_str: str = start_dt.strftime("%Y-%m-%d")
-            hour_range: str = f"{start_dt.strftime('%I:%M %p')} – {end_dt.strftime('%I:%M %p')}"
-        except Exception:
-            start_iso, end_iso, date_str, hour_range = "", "", path.stem, "—"
-            
-        sessions.append({
-            "id": path.name, "filename": path.name, "deviceId": path.stem,
-            "startTime": start_iso, "endTime": end_iso,
-            "date": date_str, "hourRange": hour_range,
-        })
-    return sessions
-
-def get_session_data_payload(session_id: str) -> Dict[str, Any]:
-    if ".." in session_id or "/" in session_id or "\\" in session_id:
-        raise ValueError("Invalid session id")
-    path: Path = SESSIONS_DIR / session_id
-    if not path.exists() or not path.suffix.lower() == ".edf":
-        raise FileNotFoundError("Session not found")
-        
-    with open(path, 'rb') as fh: 
-        header: Dict[str, Any] = read_edf_header(fh)
-    max_samples: int = min(header['num_records'] * header['samples_per_record'][0], 24 * 3600 * 512) if header['num_records'] > 0 else 500000
-    
-    samples_arr, sfreq, _ = read_edf_samples(str(path), channel_idx=0, max_samples=max_samples)
-    step: int = max(1, int(round(sfreq)))
-    samples: List[float] = [float(samples_arr[i]) for i in range(0, len(samples_arr), step)]
-    
-    startdate, starttime, _ = get_edf_start_and_duration(path)
-    try:
-        day, month, yy = [int(x) if x.strip().isdigit() else 1 for x in startdate.split(".")]
-        hour, min_, sec = [int(x) if x.strip().isdigit() else 0 for x in starttime.split(".")]
-        year: int = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
-        start_dt: datetime = dt.datetime(year, month, day, hour, min_, sec)
-    except:
-        start_dt = dt.datetime(2000, 1, 1, 0, 0, 0)
-        
-    start_ms: int = int(start_dt.timestamp() * 1000)
-    timestamps_ms: List[int] = [start_ms + i * 1000 for i in range(len(samples))]
-    
-    duration_ms: int = len(samples) * 1000
-    end_ts: int = start_ms + duration_ms
-    stage_sequence: List[Dict[str, Any]] = [
-        {"type": "awake", "duration": 0.1}, {"type": "light", "duration": 0.3},
-        {"type": "deep", "duration": 0.25}, {"type": "light", "duration": 0.15},
-        {"type": "rem", "duration": 0.2},
-    ]
-    stages_out: List[Dict[str, Any]] = []
-    t: int = start_ms
-    idx: int = 0
-    while t < end_ts:
-        st: Dict[str, Any] = stage_sequence[idx % len(stage_sequence)]
-        stage_end: float = min(t + duration_ms * st["duration"], end_ts)
-        stages_out.append({
-            "type": st["type"],
-            "startTime": dt.datetime.utcfromtimestamp(t / 1000).isoformat() + "Z",
-            "endTime": dt.datetime.utcfromtimestamp(stage_end / 1000).isoformat() + "Z",
-            "duration": (stage_end - t) / (60 * 1000),
-        })
-        t = int(stage_end)
-        idx += 1
-        
-    return {
-        "success": True, "id": session_id,
-        "startTime": dt.datetime.utcfromtimestamp(start_ms / 1000).isoformat() + "Z",
-        "endTime": dt.datetime.utcfromtimestamp(end_ts / 1000).isoformat() + "Z",
-        "deviceId": path.stem, "timestamps": timestamps_ms,
-        "channelData": [[s] for s in samples], "sleepStages": stages_out,
-        "quality": "good", "sessionType": "night",
-    }
 
 def generate_plot_stream(live: bool, username: str, get_ble_samples_cb: Optional[Callable[[int], Tuple[List[float], int]]] = None) -> Generator[str, None, None]:
     if live:
@@ -375,12 +271,15 @@ def generate_plot_stream(live: bool, username: str, get_ble_samples_cb: Optional
         if update_count > 36000: 
             break
 
+
+# ─── SECURE SAVING AND LOADING (ENCRYPTED .EEG) ──────────────────────────────────
+
 def save_eeg(samples: List[float], username: str, sampling_rate: float = 100.0) -> str:
     """Packages live EEG samples and encrypts them using crypto_ops."""
     ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
     session_data: Dict[str, Any] = {
         "username": username,
-        "Time": ts,
+        "Time": ts,  # Used for the filename
         "sampling_rate": sampling_rate,
         "samples": samples
     }
@@ -393,5 +292,189 @@ def save_eeg(samples: List[float], username: str, sampling_rate: float = 100.0) 
 
 def load_eeg(filename: str) -> Dict[str, Any]:
     """Loads and decrypts an .eeg file through crypto_ops."""
-
     return crypto_ops.decrypt_session(filename)
+
+def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float) -> Tuple[str, str]:
+    if not SESSIONS_DIR.exists(): 
+        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    import re
+    ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base: str = re.sub(r"[^0-9a-zA-Z_-]+", "_", username or "live")
+    out_name: str = filename if filename else f"{base}_session_{ts}.csv"
+    out_path: Path = SESSIONS_DIR / out_name
+
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["sample_index", "time_sec", "value"])
+        for idx, value in enumerate(samples):
+            writer.writerow([idx, f"{idx / sampling_rate:.6f}", float(value)])
+            
+    return out_path.name, str(out_path)
+
+
+# ─── FRONTEND DATA PAYLOAD GENERATION (HYBRID SUPPORT) ───────────────────────────
+
+def get_all_sessions_info() -> List[Dict[str, str]]:
+    """
+    Fetches the list of valid encrypted sessions for the logged-in user,
+    decrypts their metadata, and formats it for the frontend list.
+    (Falls back to reading .edf files if you want to keep the demo files visible).
+    """
+    if not SESSIONS_DIR.exists(): 
+        return []
+    
+    sessions: List[Dict[str, str]] = []
+
+    # 1. Fetch User's Encrypted .eeg Sessions
+    valid_eeg_files: List[str] = crypto_ops.list_user_sessions()
+    
+    for filename in valid_eeg_files:
+        try:
+            # Decrypt just to get the metadata
+            session_data: Dict[str, Any] = crypto_ops.decrypt_session(filename)
+            
+            ts_str: str = session_data.get("Time", "")
+            samples: List[float] = session_data.get("samples", [])
+            sampling_rate: float = session_data.get("sampling_rate", 100.0)
+            
+            # Parse the timestamp (Format used in save_eeg: "%Y%m%d_%H%M%S")
+            try:
+                start_dt: datetime = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+            except ValueError:
+                start_dt = datetime.now()
+            
+            duration_sec: float = len(samples) / sampling_rate if sampling_rate > 0 else 0.0
+            end_dt: datetime = start_dt + dt.timedelta(seconds=duration_sec)
+            
+            sessions.append({
+                "id": filename, 
+                "filename": filename, 
+                "deviceId": Path(filename).stem,
+                "startTime": start_dt.isoformat() + "Z", 
+                "endTime": end_dt.isoformat() + "Z",
+                "date": start_dt.strftime("%Y-%m-%d"), 
+                "hourRange": f"{start_dt.strftime('%I:%M %p')} – {end_dt.strftime('%I:%M %p')}",
+            })
+        except Exception as e:
+            printDebug(f"Error processing encrypted session {filename}: {e}")
+
+    # 2. Fetch standard .edf Demo Files (Optional fallback)
+    edf_files: List[Path] = sorted(SESSIONS_DIR.glob("*.edf"))
+    for path in edf_files:
+        try:
+            startdate, starttime, duration_sec = get_edf_start_and_duration(path)
+            parts_d: List[str] = startdate.split(".")
+            parts_t: List[str] = starttime.split(".")
+            day: int = int(parts_d[0]) if len(parts_d) >= 1 and parts_d[0].strip().isdigit() else 1
+            month: int = int(parts_d[1]) if len(parts_d) >= 2 and parts_d[1].strip().isdigit() else 1
+            yy: int = int(parts_d[2]) if len(parts_d) >= 3 and parts_d[2].strip().isdigit() else 0
+            year: int = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
+            hour: int = int(parts_t[0]) if len(parts_t) >= 1 and parts_t[0].strip().isdigit() else 0
+            min_: int = int(parts_t[1]) if len(parts_t) >= 2 and parts_t[1].strip().isdigit() else 0
+            sec: int = int(parts_t[2]) if len(parts_t) >= 3 and parts_t[2].strip().isdigit() else 0
+            start_dt = datetime(year, month, day, hour, min_, sec)
+            end_dt = datetime.fromtimestamp(start_dt.timestamp() + duration_sec)
+            
+            sessions.append({
+                "id": path.name, "filename": path.name, "deviceId": path.stem,
+                "startTime": start_dt.isoformat() + "Z", 
+                "endTime": end_dt.isoformat() + "Z",
+                "date": start_dt.strftime("%Y-%m-%d"), 
+                "hourRange": f"{start_dt.strftime('%I:%M %p')} – {end_dt.strftime('%I:%M %p')}",
+            })
+        except Exception:
+            pass
+
+    return sessions
+
+def get_session_data_payload(session_id: str) -> Dict[str, Any]:
+    """
+    Loads a specific session's actual EEG samples.
+    Dynamically handles BOTH encrypted .eeg files and raw demo .edf files.
+    """
+    if ".." in session_id or "/" in session_id or "\\" in session_id:
+        raise ValueError("Invalid session id")
+    
+    path: Path = SESSIONS_DIR / session_id
+    if not path.exists():
+        raise FileNotFoundError("Session not found")
+
+    samples: List[float] = []
+    start_dt: datetime = datetime.now()
+    
+    # --- HANDLE ENCRYPTED .EEG FILES ---
+    if path.suffix.lower() == ".eeg":
+        session_data: Dict[str, Any] = crypto_ops.decrypt_session(session_id)
+        raw_samples: List[float] = session_data.get("samples", [])
+        sfreq: float = session_data.get("sampling_rate", 100.0)
+        ts_str: str = session_data.get("Time", "")
+        
+        try:
+            start_dt = datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+        except ValueError:
+            start_dt = datetime.now()
+            
+        # Downsample to ~1Hz for review mode performance
+        step: int = max(1, int(round(sfreq)))
+        samples = [float(raw_samples[i]) for i in range(0, len(raw_samples), step)]
+
+    # --- HANDLE RAW DEMO .EDF FILES ---
+    elif path.suffix.lower() == ".edf":
+        with open(path, 'rb') as fh: 
+            header: Dict[str, Any] = read_edf_header(fh)
+        max_samples: int = min(header['num_records'] * header['samples_per_record'][0], 24 * 3600 * 512) if header['num_records'] > 0 else 500000
+        
+        samples_arr, sfreq, _ = read_edf_samples(str(path), channel_idx=0, max_samples=max_samples)
+        step = max(1, int(round(sfreq)))
+        samples = [float(samples_arr[i]) for i in range(0, len(samples_arr), step)]
+        
+        startdate, starttime, _ = get_edf_start_and_duration(path)
+        try:
+            day, month, yy = [int(x) if x.strip().isdigit() else 1 for x in startdate.split(".")]
+            hour, min_, sec = [int(x) if x.strip().isdigit() else 0 for x in starttime.split(".")]
+            year: int = (1900 + yy) if yy >= 80 else (2000 + yy) if yy < 100 else 2000
+            start_dt = dt.datetime(year, month, day, hour, min_, sec)
+        except:
+            start_dt = dt.datetime(2000, 1, 1, 0, 0, 0)
+    else:
+        raise ValueError("Unsupported file format.")
+
+    # --- COMMON PAYLOAD BUILDER ---
+    start_ms: int = int(start_dt.timestamp() * 1000)
+    timestamps_ms: List[int] = [start_ms + i * 1000 for i in range(len(samples))]
+    
+    # Build mock sleep stages (to populate the frontend UI components)
+    duration_ms: int = len(samples) * 1000
+    end_ts: int = start_ms + duration_ms
+    stage_sequence: List[Dict[str, Any]] = [
+        {"type": "awake", "duration": 0.1}, {"type": "light", "duration": 0.3},
+        {"type": "deep", "duration": 0.25}, {"type": "light", "duration": 0.15},
+        {"type": "rem", "duration": 0.2},
+    ]
+    stages_out: List[Dict[str, Any]] = []
+    t: int = start_ms
+    idx: int = 0
+    while t < end_ts:
+        st: Dict[str, Any] = stage_sequence[idx % len(stage_sequence)]
+        stage_end: float = min(t + duration_ms * st["duration"], end_ts)
+        stages_out.append({
+            "type": st["type"],
+            "startTime": dt.datetime.utcfromtimestamp(t / 1000).isoformat() + "Z",
+            "endTime": dt.datetime.utcfromtimestamp(stage_end / 1000).isoformat() + "Z",
+            "duration": (stage_end - t) / (60 * 1000),
+        })
+        t = int(stage_end)
+        idx += 1
+        
+    return {
+        "success": True, 
+        "id": session_id,
+        "startTime": dt.datetime.utcfromtimestamp(start_ms / 1000).isoformat() + "Z",
+        "endTime": dt.datetime.utcfromtimestamp(end_ts / 1000).isoformat() + "Z",
+        "deviceId": path.stem, 
+        "timestamps": timestamps_ms,
+        "channelData": [[s] for s in samples], 
+        "sleepStages": stages_out,
+        "quality": "good", 
+        "sessionType": "night",
+    }
