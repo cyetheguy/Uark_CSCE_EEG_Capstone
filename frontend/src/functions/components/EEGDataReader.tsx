@@ -749,7 +749,7 @@ const EEGDataReader: React.FC = () => {
       <div className="login-container">
         <div className="login-card">
           <div className="login-header">
-            <h1>EEG Sleep Analyzer</h1>
+            <h1>DreamT</h1>
             <p>Whole Night Sleep Session Visualization</p>
           </div>
           
@@ -824,7 +824,7 @@ const EEGDataReader: React.FC = () => {
       {/* Header */}
       <header className="app-header">
         <div className="header-left">
-          <h1>EEG Sleep Analyzer</h1>
+          <h1>DreamT</h1>
           <p className="user-info">Logged in as: <strong>{username}</strong></p>
         </div>
         <div className="header-right">
@@ -1257,7 +1257,7 @@ const EEGDataReader: React.FC = () => {
 
       {/* Footer */}
       <footer className="app-footer">
-        <p>EEG Sleep Analyzer v2.0 • Whole Night Sleep Session Analysis • {new Date().getFullYear()}</p>
+        <p>DreamT v1.0 • Whole Night Sleep Session Analysis • {new Date().getFullYear()}</p>
         <p className="demo-notice">Using simulated sleep EEG data for demonstration purposes</p>
       </footer>
     </div>

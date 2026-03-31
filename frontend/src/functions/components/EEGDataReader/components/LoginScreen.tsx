@@ -72,7 +72,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>EEG Sleep Analyzer</h1>
+          <h1>DreamT</h1>
           <p>Whole Night Sleep Session Visualization</p>
         </div>
         
