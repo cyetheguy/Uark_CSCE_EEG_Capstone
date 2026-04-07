@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AppSettings } from '../types';
 
 interface SettingsScreenProps {
@@ -14,6 +14,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onResetSettings,
   onClose
 }) => {
+  const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [folderPickerError, setFolderPickerError] = useState('');
+
+  const handleBrowseExportFolder = async () => {
+    setFolderPickerError('');
+    setIsPickingFolder(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/system/select-folder');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !(data as any)?.success) {
+        if ((data as any)?.cancelled) return;
+        const msg = (data as any)?.error || 'Unable to open folder picker';
+        setFolderPickerError(msg);
+        return;
+      }
+      onUpdateSetting('exportFolder', (data as any).path);
+    } catch (error: any) {
+      setFolderPickerError(error?.message || 'Unable to open folder picker');
+    } finally {
+      setIsPickingFolder(false);
+    }
+  };
+
   return (
     <div className="settings-screen">
       <div className="settings-header">
@@ -40,29 +63,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               <option value="auto">Auto (System)</option>
             </select>
           </div>
-          
-          <div className="setting-item">
-            <label>Time Format</label>
-            <select 
-              value={settings.timeFormat} 
-              onChange={(e) => onUpdateSetting('timeFormat', e.target.value)}
-            >
-              <option value="24h">24-hour</option>
-              <option value="12h">12-hour (AM/PM)</option>
-            </select>
-          </div>
-          
-          <div className="setting-item">
-            <label>Chart Type</label>
-            <select 
-              value={settings.chartType} 
-              onChange={(e) => onUpdateSetting('chartType', e.target.value)}
-            >
-              <option value="waveform">Waveform</option>
-              <option value="area">Area Chart</option>
-              <option value="line">Line Chart</option>
-            </select>
-          </div>
         </div>
         
         <div className="settings-group">
@@ -76,32 +76,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
               />
               Show Sleep Stages
             </label>
-          </div>
-          
-          <div className="setting-item checkbox">
-            <label>
-              <input 
-                type="checkbox" 
-                checked={settings.showBaseline} 
-                onChange={(e) => onUpdateSetting('showBaseline', e.target.checked)}
-              />
-              Show Baseline
-            </label>
-          </div>
-          
-          <div className="setting-item">
-            <label>Y-Axis Range (µV)</label>
-            <div className="slider-container">
-              <input 
-                type="range" 
-                min="50" 
-                max="200" 
-                step="10"
-                value={settings.yAxisRange} 
-                onChange={(e) => onUpdateSetting('yAxisRange', parseInt(e.target.value))}
-              />
-              <span className="slider-value">±{settings.yAxisRange} µV</span>
-            </div>
           </div>
         </div>
         
@@ -131,32 +105,33 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
             ))}
           </div>
         </div>
-        
+
         <div className="settings-group">
           <h3>Data Management</h3>
-          <div className="setting-item checkbox">
-            <label>
-              <input 
-                type="checkbox" 
-                checked={settings.autoLoadDemoData} 
-                onChange={(e) => onUpdateSetting('autoLoadDemoData', e.target.checked)}
-              />
-              Auto-load demo data on login
-            </label>
-          </div>
-          
           <div className="setting-item">
-            <label>Data Retention (days)</label>
-            <div className="slider-container">
-              <input 
-                type="range" 
-                min="1" 
-                max="90" 
-                value={settings.dataRetention} 
-                onChange={(e) => onUpdateSetting('dataRetention', parseInt(e.target.value))}
+            <label>Export Folder</label>
+            <div className="setting-inline">
+              <input
+                type="text"
+                value={settings.exportFolder}
+                onChange={(e) => onUpdateSetting('exportFolder', e.target.value)}
+                placeholder="Select an export folder"
               />
-              <span className="slider-value">{settings.dataRetention} days</span>
+              <button
+                type="button"
+                className="browse-folder-button"
+                onClick={handleBrowseExportFolder}
+                disabled={isPickingFolder}
+              >
+                {isPickingFolder ? 'Opening...' : 'Browse...'}
+              </button>
             </div>
+            <small className="setting-note">
+              Choose a folder graphically, or edit the path manually.
+            </small>
+            {folderPickerError && (
+              <small className="setting-error">{folderPickerError}</small>
+            )}
           </div>
         </div>
         

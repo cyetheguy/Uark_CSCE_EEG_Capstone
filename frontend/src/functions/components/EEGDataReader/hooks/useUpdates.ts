@@ -6,9 +6,8 @@ export const useUpdates = (settings: AppSettings) => {
   const [autoScroll, setAutoScroll] = useState(true);
 
   const addUpdate = (message: string) => {
-    const timeFormat = settings.timeFormat === '24h' ? 'HH:mm:ss' : 'hh:mm:ss A';
     const timestamp = new Date().toLocaleTimeString('en-US', { 
-      hour12: settings.timeFormat !== '24h',
+      hour12: false,
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit'

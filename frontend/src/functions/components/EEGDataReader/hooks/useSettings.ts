@@ -24,21 +24,16 @@ function loadSettingsFromStorage(key: string): AppSettings | null {
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
-  timeFormat: '24h',
   notifications: true,
-  autoLoadDemoData: true,
-  dataRetention: 30,
-  chartType: 'waveform',
   defaultDevice: 'EEG_Sleep_Device',
+  exportFolder: 'backend/sessions',
   sleepStageColors: {
     awake: '#e53e3e',
     light: '#ed8936',
     deep: '#38a169',
     rem: '#667eea'
   },
-  showSleepStages: true,
-  showBaseline: true,
-  yAxisRange: 100
+  showSleepStages: true
 };
 
 function mergeWithDefaults(partial: Partial<AppSettings> | null): AppSettings {

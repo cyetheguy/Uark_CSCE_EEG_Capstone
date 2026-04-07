@@ -26,6 +26,7 @@ import LoginScreen from './components/LoginScreen';
 import Header from './components/Header';
 import SettingsScreen from './components/SettingsScreen';
 import SessionPanel from './components/SessionPanel';
+import SleepStatusPanel from './components/SleepStatusPanel';
 import SleepStatsPanel from './components/SleepStatsPanel';
 import VisualizationPanel from './components/VisualizationPanel';
 import UpdatesLog from './components/UpdatesLog';
@@ -166,7 +167,7 @@ const EEGDataReader: React.FC = () => {
       return;
     }
 
-    updates.addUpdate('Exporting live session to CSV (backend/sessions)...');
+    updates.addUpdate(`Exporting live session to CSV (${settings.settings.exportFolder || 'backend/sessions'})...`);
 
     try {
       const response = await fetch('http://localhost:5000/api/live/export', {
@@ -177,6 +178,7 @@ const EEGDataReader: React.FC = () => {
         body: JSON.stringify({
           username: auth.username || 'demo',
           sampling_rate: 100.0,
+          output_dir: settings.settings.exportFolder,
         }),
       });
 
@@ -184,7 +186,8 @@ const EEGDataReader: React.FC = () => {
 
       if (response.ok && (data as any)?.success) {
         const name = (data as any).filename || 'unknown.csv';
-        updates.addUpdate(`✅ Live session exported as ${name}`);
+        const path = (data as any).path || '';
+        updates.addUpdate(`✅ Live session exported as ${name}${path ? ` (${path})` : ''}`);
       } else {
         const msg = (data as any)?.error || (data as any)?.message || `HTTP ${response.status}`;
         updates.addUpdate(`❌ Export failed: ${msg}`);
@@ -204,8 +207,11 @@ const EEGDataReader: React.FC = () => {
     updates.clearUpdates();
   };
 
-  // Calculations
-  const sleepStats: SleepStats | null = sleepData.calculateSleepStats();
+  // Calculations (mode-specific so live/review are independent in behavior)
+  const liveSession =
+    sleepData.sleepSessions.find((s) => s.id.startsWith('edf_stream_')) ?? sleepData.selectedSession;
+  const statsSession = mode === 'live' ? liveSession : sleepData.selectedSession;
+  const sleepStats: SleepStats | null = sleepData.calculateSleepStatsForSession(statsSession);
 
   // Format data for EEGChart (downsample if needed so the chart renders)
   const getChartData = () => {
@@ -283,22 +289,30 @@ const EEGDataReader: React.FC = () => {
         <main className="main-content">
           <div className="dashboard-grid">
             <section className="dashboard-left">
-              <SessionPanel
-                mode={mode}
-                sleepSessions={sleepData.sleepSessions}
-                selectedSession={sleepData.selectedSession}
-                sessionList={sleepData.sessionList}
-                isLoading={sleepData.isLoading}
-                isLoadingSessions={sleepData.isLoadingSessions}
-                onSelectSession={handleSelectSession}
-                onLoadSession={handleLoadSession}
-                onLoadDemoData={handleLoadDemoData}
-                onFetchSessionList={handleFetchSessionList}
-                onGenerateDemoSessionList={handleGenerateDemoSessionList}
-                onClearData={handleClearData}
-              />
+              {mode === 'live' ? (
+                <SleepStatusPanel
+                  selectedSession={sleepData.selectedSession}
+                  getSleepStageAtTime={sleepData.getSleepStageAtTime}
+                  onClearData={handleClearData}
+                />
+              ) : (
+                <SessionPanel
+                  mode={mode}
+                  sleepSessions={sleepData.sleepSessions}
+                  selectedSession={sleepData.selectedSession}
+                  sessionList={sleepData.sessionList}
+                  isLoading={sleepData.isLoading}
+                  isLoadingSessions={sleepData.isLoadingSessions}
+                  onSelectSession={handleSelectSession}
+                  onLoadSession={handleLoadSession}
+                  onLoadDemoData={handleLoadDemoData}
+                  onFetchSessionList={handleFetchSessionList}
+                  onGenerateDemoSessionList={handleGenerateDemoSessionList}
+                  onClearData={handleClearData}
+                />
+              )}
 
-              {sleepData.edfStreamState.isStreaming && (
+              {mode === 'live' && sleepData.edfStreamState.isStreaming && (
                 <div className="visualization-panel acquisition-panel">
                   <div className="panel-header">
                     <h2>Acquisition status</h2>
@@ -343,6 +357,33 @@ const EEGDataReader: React.FC = () => {
                           Export current live session (CSV)
                         </button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {mode === 'review' && sleepData.selectedSession && (
+                <div className="visualization-panel acquisition-panel">
+                  <div className="panel-header">
+                    <h2>Loaded file details</h2>
+                  </div>
+                  <div className="visualization-content acquisition-content">
+                    <div className="acquisition-card">
+                      <dl className="acquisition-meta">
+                        <dt>File name</dt>
+                        <dd>{sleepData.selectedSession.id || '—'}</dd>
+                        <dt>Device</dt>
+                        <dd>{sleepData.selectedSession.deviceId || '—'}</dd>
+                        <dt>Samples loaded</dt>
+                        <dd>{sleepData.selectedSession.channelData.length.toLocaleString()}</dd>
+                        <dt>Recording duration</dt>
+                        <dd>{(() => {
+                          const s = sleepData.selectedSession;
+                          if (!s.timestamps?.length || s.timestamps.length < 2) return '0 min';
+                          const min = (s.timestamps[s.timestamps.length - 1].getTime() - s.timestamps[0].getTime()) / 60000;
+                          return `${min.toFixed(2)} min`;
+                        })()}</dd>
+                      </dl>
                     </div>
                   </div>
                 </div>

@@ -295,14 +295,22 @@ def load_eeg(filename: str) -> Dict[str, Any]:
     """Loads and decrypts an .eeg file through crypto_ops."""
     return crypto_ops.decrypt_session(filename)
 
-def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float) -> Tuple[str, str]:
-    if not SESSIONS_DIR.exists(): 
-        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float, output_dir: str = "") -> Tuple[str, str]:
+    target_dir: Path
+    if output_dir and str(output_dir).strip():
+        target_dir = Path(str(output_dir).strip()).expanduser()
+        if not target_dir.is_absolute():
+            target_dir = (BACKEND_DIR.parent / target_dir).resolve()
+    else:
+        target_dir = SESSIONS_DIR
+
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True, exist_ok=True)
     import re
     ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
     base: str = re.sub(r"[^0-9a-zA-Z_-]+", "_", username or "live")
     out_name: str = filename if filename else f"{base}_session_{ts}.csv"
-    out_path: Path = SESSIONS_DIR / out_name
+    out_path: Path = target_dir / out_name
 
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)

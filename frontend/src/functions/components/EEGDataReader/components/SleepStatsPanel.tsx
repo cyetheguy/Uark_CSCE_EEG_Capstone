@@ -38,7 +38,7 @@ const SleepStatsPanel: React.FC<SleepStatsPanelProps> = ({ sleepStats, settings 
             borderColor: settings.sleepStageColors[stage]
           }}>
             <div className="stat-value" style={{ color: settings.sleepStageColors[stage] }}>
-              {(duration / 60).toFixed(1)} h
+              {(duration / 60).toFixed(2)} h
             </div>
             <div className="stat-label" style={{ color: settings.sleepStageColors[stage] }}>
               {stageLabel[stage] ?? stage}

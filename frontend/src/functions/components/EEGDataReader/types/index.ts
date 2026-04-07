@@ -19,16 +19,11 @@ export interface SleepStage {
 
 export interface AppSettings {
   theme: 'light' | 'dark' | 'auto';
-  timeFormat: '12h' | '24h';
   notifications: boolean;
-  autoLoadDemoData: boolean;
-  dataRetention: number;
-  chartType: 'line' | 'area' | 'waveform';
   defaultDevice: string;
+  exportFolder: string;
   sleepStageColors: Record<string, string>;
   showSleepStages: boolean;
-  showBaseline: boolean;
-  yAxisRange: number;
 }
 
 export interface SessionMetadata {
