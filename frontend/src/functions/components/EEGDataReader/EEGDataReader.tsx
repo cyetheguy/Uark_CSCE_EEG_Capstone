@@ -65,7 +65,7 @@ const EEGDataReader: React.FC = () => {
   const sleepData = useSleepData();
   const updates = useUpdates(settings.settings);
 
-  // Effects: Live = BLE stream (default); Review = session list / EDF from file
+  // Effects: Live = BLE stream (default); Review = encrypted session list from server (decrypt in backend)
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     if (mode === 'live') {
@@ -74,9 +74,8 @@ const EEGDataReader: React.FC = () => {
     } else {
       sleepData.cleanupStreams();
       sleepData.setSelectedSession(null);
-      if (sleepData.sessionList.length === 0) {
-        sleepData.fetchSessionList();
-      }
+      // Always refresh: backend uses list_user_sessions + decrypt_session per file for metadata
+      sleepData.fetchSessionList();
     }
   }, [auth.isAuthenticated, auth.username, mode]);
 
@@ -92,7 +91,7 @@ const EEGDataReader: React.FC = () => {
     if (newMode === 'live') {
       updates.addUpdate('Switched to Live (BLE acquisition)');
     } else {
-      updates.addUpdate('Switched to Review sessions (EDF from file)');
+      updates.addUpdate('Switched to Review: loading encrypted sessions from server (decrypt)');
     }
   };
 
@@ -157,6 +156,41 @@ const EEGDataReader: React.FC = () => {
       }
     } catch (error: any) {
       updates.addUpdate(`❌ Debug scan error: ${error?.message || String(error)}`);
+    }
+  };
+
+  /** Saves BLE buffer to an encrypted .eeg using the logged-in user's key (backend USR_KEY from /api/login). */
+  const handleSaveEncryptedSession = async () => {
+    if (!sleepData.selectedSession || !sleepData.selectedSession.channelData.length) {
+      updates.addUpdate('❌ No live data to save yet');
+      return;
+    }
+
+    updates.addUpdate('Saving encrypted sleep session (.eeg) to server...');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/sessions/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: auth.username || 'demo',
+          sampling_rate: 100.0,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && (data as any)?.success) {
+        const name = (data as any).filename || 'unknown.eeg';
+        updates.addUpdate(`✅ Encrypted session saved as ${name} (switch to Review → Refresh to list it)`);
+      } else {
+        const msg = (data as any)?.error || (data as any)?.message || `HTTP ${response.status}`;
+        updates.addUpdate(`❌ Encrypted save failed: ${msg}`);
+      }
+    } catch (error: any) {
+      updates.addUpdate(`❌ Save error: ${error?.message || String(error)}`);
     }
   };
 
@@ -337,10 +371,18 @@ const EEGDataReader: React.FC = () => {
                         <button
                           type="button"
                           className="primary-button"
+                          onClick={handleSaveEncryptedSession}
+                          disabled={!sleepData.selectedSession || !sleepData.selectedSession.channelData.length}
+                        >
+                          Save encrypted sleep session (.eeg)
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary-button"
                           onClick={handleExportLiveSession}
                           disabled={!sleepData.selectedSession || !sleepData.selectedSession.channelData.length}
                         >
-                          Export current live session (CSV)
+                          Export CSV (unencrypted)
                         </button>
                       </div>
                     </div>

@@ -1589,6 +1589,26 @@ table td {
   color: #e2e8f0;
 }
 
+.acquisition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.acquisition-actions .secondary-button {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.acquisition-actions .secondary-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 /* Sleep Stage Timeline */
 .sleep-stage-timeline {
   margin-top: 2rem;

@@ -37,7 +37,6 @@ def login() -> Tuple[Response, int]:
             "sessions": crypto_ops.list_user_sessions()
         }), 200
     return jsonify({"success": 0, "message": "Invalid credentials"}), 200
-    return jsonify({"success": 0, "message": "Invalid credentials"}), 200
 
 @app.route('/api/create-account', methods=['POST'])
 def create_account() -> Tuple[Response, int]:
@@ -137,6 +136,28 @@ def export_live_csv() -> Tuple[Response, int]:
         return jsonify({"success": True, "filename": name, "path": path, "samples": len(samples)}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/sessions/save', methods=['POST'])
+def save_encrypted_session() -> Tuple[Response, int]:
+    """Persist live BLE samples as an encrypted .eeg file (requires successful /api/login for USR_KEY)."""
+    try:
+        payload: Dict[str, Any] = request.get_json(silent=True) or {}
+        username: str = str(payload.get("username", "") or "")
+        sampling_rate: float = float(payload.get("sampling_rate", 100.0))
+        samples: List[float] = []
+        with ble_comms.bluetooth_samples_lock:
+            samples = list(ble_comms.bluetooth_samples)
+
+        if not samples:
+            return jsonify({"success": False, "error": "No BLE samples available"}), 400
+
+        filename: str = data_processor.save_eeg(samples, username, sampling_rate)
+        return jsonify({"success": True, "filename": filename, "samples": len(samples)}), 200
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 503
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route('/api/sessions/list', methods=['GET'])
 def list_sessions() -> Tuple[Response, int]:

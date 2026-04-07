@@ -242,6 +242,7 @@ export const useSleepData = () => {
     }
   }, [generateMockSleepStages]);
 
+  /** Loads sessions for Review mode: backend filters with list_user_sessions then decrypt_session for each .eeg. */
   const fetchSessionList = useCallback(async () => {
     setIsLoadingSessions(true);
     try {

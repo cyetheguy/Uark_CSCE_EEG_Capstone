@@ -1,17 +1,29 @@
 import os
 import json
-import glob
+import random
+import string
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Random import get_random_bytes
-import random
-import string
 from debug import printDebug
 
+BACKEND_ROOT: Path = Path(__file__).resolve().parent
+USER_DIR: Path = BACKEND_ROOT / "user"
+SESSIONS_DIR: Path = BACKEND_ROOT / "sessions"
+
 USR_KEY: Optional[bytes] = None
-all_usr: List[str] = glob.glob("backend/user/*.USR")
+
+
+def _list_usr_files() -> List[str]:
+    if not USER_DIR.exists():
+        return []
+    return [str(p) for p in sorted(USER_DIR.glob("*.USR"))]
+
+
+all_usr: List[str] = _list_usr_files()
 
 def derive_key(password: str, salt: bytes) -> bytes:
     """Returns SHA-256 key from password and salt"""
@@ -71,9 +83,12 @@ def create_usr_file(username: str, password: str) -> bool:
     
     # Filename creation
     filename: str = ""
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+
     while True:
-        filename = "".join(random.choice(string.ascii_letters) for i in range(8))
-        if f"backend/user/{filename}.USR" not in all_usr:
+        fname = "".join(random.choice(string.ascii_letters) for _ in range(8))
+        candidate = USER_DIR / f"{fname}.USR"
+        if not candidate.exists():
             break
 
     # Salt creation
@@ -89,13 +104,13 @@ def create_usr_file(username: str, password: str) -> bool:
     ciphertext, tag = cipher.encrypt_and_digest(data)
     
     # Write: Salt + Nonce + Tag + Ciphertext
-    with open(f"backend/user/{filename}.USR", "wb") as f:
+    with open(candidate, "wb") as f:
         f.write(salt + nonce + tag + ciphertext)
         
-    printDebug(f"[Setup] Created salted file '{filename}.USR' for user '{username}'")
+    printDebug(f"[Setup] Created salted file '{candidate.name}' for user '{username}'")
     
     # Refresh the global list of users
-    all_usr = glob.glob("backend/user/*.USR")
+    all_usr = _list_usr_files()
     return True
 
 def encrypt_session(session: Dict[str, Any]) -> bool:
@@ -115,8 +130,9 @@ def encrypt_session(session: Dict[str, Any]) -> bool:
     nonce: bytes = cipher.nonce
     ciphertext, tag = cipher.encrypt_and_digest(data)
 
-    # Write file to /backend/sessions/
-    with open(f"backend/sessions/{date_info}.eeg", "wb") as f:
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path: Path = SESSIONS_DIR / f"{date_info}.eeg"
+    with open(out_path, "wb") as f:
         f.write(nonce + tag + ciphertext)
     return True
 
@@ -128,7 +144,10 @@ def list_user_sessions() -> List[str]:
     if USR_KEY is None:
         return valid_lists
 
-    for filepath in glob.glob("backend/sessions/*.eeg"):
+    if not SESSIONS_DIR.exists():
+        return valid_lists
+
+    for filepath in sorted(SESSIONS_DIR.glob("*.eeg")):
         with open(filepath, "rb") as f:
             nonce: bytes = f.read(16)
             tag: bytes = f.read(16)
@@ -136,7 +155,7 @@ def list_user_sessions() -> List[str]:
             cipher = AES.new(USR_KEY, AES.MODE_GCM, nonce=nonce)
             try: 
                 cipher.decrypt_and_verify(ciphertext, tag)
-                valid_lists.append(os.path.basename(filepath))
+                valid_lists.append(filepath.name)
             except:
                 continue
     return valid_lists
@@ -150,9 +169,10 @@ def decrypt_session(filename: str) -> Dict[str, Any]:
     if USR_KEY is None:
         raise PermissionError("No active user session (USR_KEY is None).")
     
-    filepath: str = filename if filename.startswith("backend/sessions/") else f"backend/sessions/{filename}"
+    base: str = os.path.basename(filename.replace("\\", "/"))
+    filepath: Path = SESSIONS_DIR / base
 
-    if not os.path.exists(filepath):
+    if not filepath.is_file():
         raise FileNotFoundError(f"Session file not found: {filepath}")
 
     with open(filepath, "rb") as f:
@@ -167,7 +187,7 @@ def decrypt_session(filename: str) -> Dict[str, Any]:
         session_data: Dict[str, Any] = json.loads(decrypted_bytes.decode('utf-8'))
         return session_data
     except Exception as e:
-        raise ValueError(f"Failed to decrypt {filepath}. Key mismatch or corrupted file. Error: {e}")
+        raise ValueError(f"Failed to decrypt {filepath!s}. Key mismatch or corrupted file. Error: {e}")
 
 if __name__ == "__main__":
     print("\n--- Front End Login ---")
