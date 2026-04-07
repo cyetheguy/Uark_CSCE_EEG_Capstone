@@ -347,15 +347,6 @@ const EEGDataReader: React.FC = () => {
                   </div>
                 </div>
               )}
-
-              {showRawData && (
-                <UpdatesLog
-                  updates={updates.updates}
-                  autoScroll={autoScroll}
-                  onAutoScrollChange={setAutoScroll}
-                  onClearUpdates={handleClearUpdates}
-                />
-              )}
             </section>
 
             <section className="dashboard-center">
@@ -388,6 +379,14 @@ const EEGDataReader: React.FC = () => {
 
             <section className="dashboard-right">
               <SleepStatsPanel sleepStats={sleepStats} settings={settings.settings} />
+              {showRawData && (
+                <UpdatesLog
+                  updates={updates.updates}
+                  autoScroll={autoScroll}
+                  onAutoScrollChange={setAutoScroll}
+                  onClearUpdates={handleClearUpdates}
+                />
+              )}
             </section>
           </div>
         </main>

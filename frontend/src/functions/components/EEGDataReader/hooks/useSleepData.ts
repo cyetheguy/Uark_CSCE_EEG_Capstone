@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { SleepSessionData, SleepStage, SessionMetadata, SleepStats, EDFStreamState } from '../types';
+import { computeSleepStagesFromAmplitude, EPOCH_SEC } from '../utils/sleepStagesFromAmplitude';
 
 export const useSleepData = () => {
   const [sleepSessions, setSleepSessions] = useState<SleepSessionData[]>([]);
@@ -14,9 +15,12 @@ export const useSleepData = () => {
   });
   
   const edfEventSourceRef = useRef<EventSource | null>(null);
+  const liveStreamSfreqRef = useRef(100);
+  const lastStageRecomputeMsRef = useRef(0);
 
-  // AASM standard: one stage per 30-second epoch. Live demo uses realistic run lengths (minutes), not 10s hops.
-  const EPOCH_SEC = 30;
+  const STAGE_RECOMPUTE_MS = 2000;
+
+  // AASM standard: one stage per 30-second epoch. Demo data still uses synthetic cycling below.
   const generateMockSleepStages = useCallback((start: Date, end: Date, isLiveDemo: boolean = false): SleepStage[] => {
     const durationMs = end.getTime() - start.getTime();
     const stages: SleepStage[] = [];
@@ -161,6 +165,9 @@ export const useSleepData = () => {
         setIsLoading(false);
         return;
       }
+
+      liveStreamSfreqRef.current = typeof infoData.sampling_rate === 'number' ? infoData.sampling_rate : 100;
+      lastStageRecomputeMsRef.current = 0;
       
       const now = new Date();
       const sessionStart = new Date(now);
@@ -173,8 +180,7 @@ export const useSleepData = () => {
         deviceId: `🔴 LIVE: ${infoData.filename}`,
         timestamps: [],
         channelData: [],
-        // Use isLiveDemo=true here for fast transitions
-        sleepStages: generateMockSleepStages(sessionStart, new Date(sessionStart.getTime() + 8 * 60 * 60 * 1000), true),
+        sleepStages: [],
         quality: 'good',
         sessionType: 'night'
       };
@@ -208,6 +214,17 @@ export const useSleepData = () => {
           const timestamp = new Date(sessionStart.getTime() + data.timestamp * 1000);
           streamSession.timestamps.push(timestamp);
           streamSession.channelData.push([data.value]);
+
+          const sf = liveStreamSfreqRef.current;
+          const epochSamples = Math.max(1, Math.round(EPOCH_SEC * sf));
+          const vals = streamSession.channelData.map((row) => row[0]);
+          if (vals.length >= epochSamples) {
+            const nowMs = Date.now();
+            if (nowMs - lastStageRecomputeMsRef.current >= STAGE_RECOMPUTE_MS) {
+              lastStageRecomputeMsRef.current = nowMs;
+              streamSession.sleepStages = computeSleepStagesFromAmplitude(vals, sf, sessionStart);
+            }
+          }
           
           // Update UI on every sample so amplitude and hypnogram reflect data every second
           // Use new array refs so React detects the change and re-renders
@@ -215,6 +232,7 @@ export const useSleepData = () => {
             ...streamSession,
             timestamps: [...streamSession.timestamps],
             channelData: streamSession.channelData.map((row) => [...row]),
+            sleepStages: [...streamSession.sleepStages],
           });
           
           sampleCount++;
@@ -240,7 +258,7 @@ export const useSleepData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [generateMockSleepStages]);
+  }, []);
 
   const fetchSessionList = useCallback(async () => {
     setIsLoadingSessions(true);
@@ -347,14 +365,14 @@ export const useSleepData = () => {
       ? Math.round((1 - awakeMinutes / totalMinutes) * 100).toString()
       : "—";
 
-    let numCycles = 0;
-    if (stages.length >= 2) {
-      for (let i = 1; i < stages.length; i++) {
-        const prev = stages[i - 1].type;
-        const curr = stages[i].type;
-        if ((prev === 'deep' || prev === 'rem') && (curr === 'light' || curr === 'awake')) numCycles++;
-      }
-    }
+    // Rough estimate: typical cycle ~2 h; count ≈ (light + deep + REM) / 2 h
+    const asleepMinutes =
+      (stageDurations.light ?? 0) + (stageDurations.deep ?? 0) + (stageDurations.rem ?? 0);
+    const EST_HOURS_PER_CYCLE = 2;
+    const numCycles =
+      asleepMinutes <= 0
+        ? 0
+        : Math.round(asleepMinutes / 60 / EST_HOURS_PER_CYCLE);
 
     return {
       totalDuration: totalDurationHours,
