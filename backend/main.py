@@ -3,7 +3,7 @@ import sys
 import json
 import time
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Union
 
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
@@ -131,7 +131,8 @@ def export_live_csv() -> Tuple[Response, int]:
             samples, 
             payload.get("username", ""), 
             payload.get("filename", ""), 
-            float(payload.get("sampling_rate", 100.0))
+            float(payload.get("sampling_rate", 100.0)),
+            payload.get("output_dir", "")
         )
         return jsonify({"success": True, "filename": name, "path": path, "samples": len(samples)}), 200
     except Exception as e:
@@ -159,6 +160,24 @@ def save_encrypted_session() -> Tuple[Response, int]:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route('/api/system/select-folder', methods=['GET'])
+def select_folder() -> Tuple[Response, int]:
+    try:
+        # Native folder picker for local desktop usage.
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        selected = filedialog.askdirectory(title='Select Export Folder')
+        root.destroy()
+
+        if not selected:
+            return jsonify({"success": False, "cancelled": True}), 200
+        return jsonify({"success": True, "path": selected}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 @app.route('/api/sessions/list', methods=['GET'])
 def list_sessions() -> Tuple[Response, int]:
     try:

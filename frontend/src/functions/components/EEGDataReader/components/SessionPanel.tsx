@@ -31,7 +31,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
   onClearData
 }) => {
   return (
-    <div className="session-panel">
+    <div className={`session-panel ${mode === 'review' ? 'review-mode' : ''}`}>
       <div className="panel-header">
         <h2>{mode === 'live' ? 'Live Sessions' : 'Sleep Sessions'}</h2>
         {mode === 'review' && (
@@ -48,7 +48,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
       
       <div className="session-controls">
         {mode === 'review' ? (
-          <div className="session-list">
+          <div className="session-list review-mode">
             {isLoadingSessions ? (
               <div className="loading-sessions">
                 <p>Loading sessions from server...</p>

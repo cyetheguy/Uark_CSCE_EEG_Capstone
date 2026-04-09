@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { SleepSessionData, SleepStage, SessionMetadata, SleepStats, EDFStreamState } from '../types';
+import { computeSleepStagesFromAmplitude, EPOCH_SEC } from '../utils/sleepStagesFromAmplitude';
 
 export const useSleepData = () => {
   const [sleepSessions, setSleepSessions] = useState<SleepSessionData[]>([]);
@@ -14,9 +15,12 @@ export const useSleepData = () => {
   });
   
   const edfEventSourceRef = useRef<EventSource | null>(null);
+  const liveStreamSfreqRef = useRef(100);
+  const lastStageRecomputeMsRef = useRef(0);
 
-  // AASM standard: one stage per 30-second epoch. Live demo uses realistic run lengths (minutes), not 10s hops.
-  const EPOCH_SEC = 30;
+  const STAGE_RECOMPUTE_MS = 2000;
+
+  // AASM standard: one stage per 30-second epoch. Demo data still uses synthetic cycling below.
   const generateMockSleepStages = useCallback((start: Date, end: Date, isLiveDemo: boolean = false): SleepStage[] => {
     const durationMs = end.getTime() - start.getTime();
     const stages: SleepStage[] = [];
@@ -161,6 +165,9 @@ export const useSleepData = () => {
         setIsLoading(false);
         return;
       }
+
+      liveStreamSfreqRef.current = typeof infoData.sampling_rate === 'number' ? infoData.sampling_rate : 100;
+      lastStageRecomputeMsRef.current = 0;
       
       const now = new Date();
       const sessionStart = new Date(now);
@@ -173,8 +180,7 @@ export const useSleepData = () => {
         deviceId: `🔴 LIVE: ${infoData.filename}`,
         timestamps: [],
         channelData: [],
-        // Use isLiveDemo=true here for fast transitions
-        sleepStages: generateMockSleepStages(sessionStart, new Date(sessionStart.getTime() + 8 * 60 * 60 * 1000), true),
+        sleepStages: [],
         quality: 'good',
         sessionType: 'night'
       };
@@ -193,6 +199,8 @@ export const useSleepData = () => {
       edfEventSourceRef.current = eventSource;
       
       let sampleCount = 0;
+      let lastPlottedSecond = -1;
+      const rawValues: number[] = [];
       
       eventSource.onmessage = (event) => {
         try {
@@ -206,16 +214,33 @@ export const useSleepData = () => {
           }
           
           const timestamp = new Date(sessionStart.getTime() + data.timestamp * 1000);
-          streamSession.timestamps.push(timestamp);
-          streamSession.channelData.push([data.value]);
-          
-          // Update UI on every sample so amplitude and hypnogram reflect data every second
-          // Use new array refs so React detects the change and re-renders
-          setSelectedSession({
-            ...streamSession,
-            timestamps: [...streamSession.timestamps],
-            channelData: streamSession.channelData.map((row) => [...row]),
-          });
+          rawValues.push(data.value);
+
+          // Plot/UI is intentionally downsampled to 1 point per second for smoother rendering.
+          const sf = liveStreamSfreqRef.current;
+          const tsSecond = Math.floor(timestamp.getTime() / 1000);
+          if (tsSecond !== lastPlottedSecond) {
+            lastPlottedSecond = tsSecond;
+            streamSession.timestamps.push(timestamp);
+            streamSession.channelData.push([data.value]);
+            const updatedSession = {
+              ...streamSession,
+              timestamps: [...streamSession.timestamps],
+              channelData: streamSession.channelData.map((row) => [...row]),
+              sleepStages: [...streamSession.sleepStages],
+            };
+            setSelectedSession(updatedSession);
+            setSleepSessions([updatedSession]);
+          }
+
+          const epochSamples = Math.max(1, Math.round(EPOCH_SEC * sf));
+          if (rawValues.length >= epochSamples) {
+            const nowMs = Date.now();
+            if (nowMs - lastStageRecomputeMsRef.current >= STAGE_RECOMPUTE_MS) {
+              lastStageRecomputeMsRef.current = nowMs;
+              streamSession.sleepStages = computeSleepStagesFromAmplitude(rawValues, sf, sessionStart);
+            }
+          }
           
           sampleCount++;
           
@@ -240,7 +265,7 @@ export const useSleepData = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [generateMockSleepStages]);
+  }, []);
 
   /** Loads sessions for Review mode: backend filters with list_user_sessions then decrypt_session for each .eeg. */
   const fetchSessionList = useCallback(async () => {
@@ -313,10 +338,10 @@ export const useSleepData = () => {
     }
   }, []);
 
-  const calculateSleepStats = useCallback((): SleepStats | null => {
-    if (!selectedSession) return null;
-    const timestamps = selectedSession.timestamps;
-    const stages = selectedSession.sleepStages;
+  const calculateSleepStatsForSession = useCallback((session: SleepSessionData | null): SleepStats | null => {
+    if (!session) return null;
+    const timestamps = session.timestamps;
+    const stages = session.sleepStages;
     const n = timestamps.length;
 
     if (n === 0) {
@@ -331,7 +356,7 @@ export const useSleepData = () => {
     const startMs = timestamps[0].getTime();
     const endMs = timestamps[n - 1].getTime();
     const totalMinutes = (endMs - startMs) / 60000;
-    const totalDurationHours = (totalMinutes / 60).toFixed(1);
+    const totalDurationHours = (totalMinutes / 60).toFixed(2);
 
     const stageDurations: Record<string, number> = { awake: 0, light: 0, deep: 0, rem: 0 };
     let awakeMinutes = 0;
@@ -344,18 +369,25 @@ export const useSleepData = () => {
       if (stage.type === 'awake') awakeMinutes += overlapMin;
     }
 
-    const efficiency = totalMinutes > 0
-      ? Math.round((1 - awakeMinutes / totalMinutes) * 100).toString()
+    const stagedTotalMinutes =
+      (stageDurations.awake ?? 0) +
+      (stageDurations.light ?? 0) +
+      (stageDurations.deep ?? 0) +
+      (stageDurations.rem ?? 0);
+    const asleepMinutes =
+      (stageDurations.light ?? 0) +
+      (stageDurations.deep ?? 0) +
+      (stageDurations.rem ?? 0);
+    const efficiency = stagedTotalMinutes > 0
+      ? ((asleepMinutes / stagedTotalMinutes) * 100).toFixed(1)
       : "—";
 
-    let numCycles = 0;
-    if (stages.length >= 2) {
-      for (let i = 1; i < stages.length; i++) {
-        const prev = stages[i - 1].type;
-        const curr = stages[i].type;
-        if ((prev === 'deep' || prev === 'rem') && (curr === 'light' || curr === 'awake')) numCycles++;
-      }
-    }
+    // Rough estimate: typical cycle ~2 h; count ≈ (light + deep + REM) / 2 h
+    const EST_HOURS_PER_CYCLE = 2;
+    const numCycles =
+      asleepMinutes <= 0
+        ? 0
+        : Math.round(asleepMinutes / 60 / EST_HOURS_PER_CYCLE);
 
     return {
       totalDuration: totalDurationHours,
@@ -363,7 +395,11 @@ export const useSleepData = () => {
       efficiency,
       numCycles
     };
-  }, [selectedSession]);
+  }, []);
+
+  const calculateSleepStats = useCallback((): SleepStats | null => {
+    return calculateSleepStatsForSession(selectedSession);
+  }, [calculateSleepStatsForSession, selectedSession]);
 
   const cleanupStreams = useCallback(() => {
     if (edfEventSourceRef.current) {
@@ -388,6 +424,7 @@ export const useSleepData = () => {
     fetchSessionList,
     loadSessionData,
     getSleepStageAtTime,
+    calculateSleepStatsForSession,
     calculateSleepStats,
     cleanupStreams
   };

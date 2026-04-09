@@ -158,31 +158,33 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                   )}
                 </div>
 
-                <div className="graph-tooltip-box">
-                  {hoverData ? (
-                    <div className="graph-tooltip-content">
-                       <span className="graph-tooltip-time">{hoverData.time}</span>
-                       {showRawData ? (
-                         <span className="graph-tooltip-value">
-                           Amplitude: {hoverData.value.toFixed(2)} µV
-                         </span>
-                       ) : (
-                         (() => {
-                           const q = getQualityText(hoverData.stage);
-                           return (
-                             <span style={{ color: q.color, fontWeight: '600' }}>
-                               Stage: {hoverData.stage.charAt(0).toUpperCase() + hoverData.stage.slice(1)}
-                             </span>
-                           );
-                         })()
-                       )}
-                    </div>
-                  ) : (
-                    <span className="graph-tooltip-default">
-                      Current stage: <strong style={{ color: STAGE_COLORS[currentStage], textTransform: 'capitalize' }}>{currentStage}</strong>
-                    </span>
-                  )}
-                </div>
+                {settings.showSleepStages && (
+                  <div className="graph-tooltip-box">
+                    {hoverData ? (
+                      <div className="graph-tooltip-content">
+                         <span className="graph-tooltip-time">{hoverData.time}</span>
+                         {showRawData ? (
+                           <span className="graph-tooltip-value">
+                             Amplitude: {hoverData.value.toFixed(2)} µV
+                           </span>
+                         ) : (
+                           (() => {
+                             const q = getQualityText(hoverData.stage);
+                             return (
+                               <span style={{ color: q.color, fontWeight: '600' }}>
+                                 Stage: {hoverData.stage.charAt(0).toUpperCase() + hoverData.stage.slice(1)}
+                               </span>
+                             );
+                           })()
+                         )}
+                      </div>
+                    ) : (
+                      <span className="graph-tooltip-default">
+                        Current stage: <strong style={{ color: STAGE_COLORS[currentStage], textTransform: 'capitalize' }}>{currentStage}</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -215,7 +217,18 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                       <XAxis dataKey="timeStr" interval={100} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} label={{ value: 'Time (HH:MM:SS)', position: 'insideBottom', offset: -4, fill: 'var(--text-secondary)', fontSize: 10 }} />
                       <YAxis domain={['auto', 'auto']} stroke="var(--text-secondary)" width={42} tick={{ fontSize: 10 }} label={{ value: 'µV', angle: -90, position: 'insideLeft', fill: 'var(--text-secondary)', fontSize: 10 }} />
-                      <Tooltip content={() => null} cursor={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }} />
+                      <Tooltip
+                        cursor={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}
+                        contentStyle={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          color: 'var(--text-primary)'
+                        }}
+                        labelStyle={{ color: 'var(--text-secondary)' }}
+                        formatter={(value: any) => [`${Number(value).toFixed(2)} µV`, 'Amplitude']}
+                        labelFormatter={(label: any) => `Time: ${label}`}
+                      />
                       <Line 
                         type="monotone" 
                         dataKey="value" 
@@ -258,7 +271,21 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         tick={{ fontSize: 10, fontWeight: '600', fill: 'var(--text-secondary)' }}
                         label={{ value: 'Stage', angle: -90, position: 'insideLeft', fill: 'var(--text-secondary)', fontSize: 10 }}
                       />
-                      <Tooltip content={() => null} cursor={{ stroke: 'var(--text-primary)', strokeWidth: 2 }} />
+                      <Tooltip
+                        cursor={{ stroke: 'var(--text-primary)', strokeWidth: 2 }}
+                        contentStyle={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          color: 'var(--text-primary)'
+                        }}
+                        labelStyle={{ color: 'var(--text-secondary)' }}
+                        formatter={(_: any, __: any, item: any) => {
+                          const stage = item?.payload?.stage || 'unknown';
+                          return [stage.charAt(0).toUpperCase() + stage.slice(1), 'Stage'];
+                        }}
+                        labelFormatter={(label: any) => `Time: ${label}`}
+                      />
 
                       {/* Horizontal stage bands (background) */}
                       <ReferenceArea y1={0.5} y2={1.5} fill={settings.sleepStageColors['deep']} fillOpacity={0.25} isFront={false} />
@@ -313,8 +340,6 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                  showStats={true}
                  sleepStages={selectedSession.sleepStages}
                  showSleepStages={settings.showSleepStages}
-                 yAxisRange={settings.yAxisRange}
-                 chartType={settings.chartType}
                />
              </div>
           </div>

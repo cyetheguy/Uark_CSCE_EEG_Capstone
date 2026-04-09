@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 
 import crypto_ops
 from debug import printDebug
+from sleep_stages_amplitude import compute_sleep_stages_amplitude
 
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
@@ -294,14 +295,22 @@ def load_eeg(filename: str) -> Dict[str, Any]:
     """Loads and decrypts an .eeg file through crypto_ops."""
     return crypto_ops.decrypt_session(filename)
 
-def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float) -> Tuple[str, str]:
-    if not SESSIONS_DIR.exists(): 
-        SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float, output_dir: str = "") -> Tuple[str, str]:
+    target_dir: Path
+    if output_dir and str(output_dir).strip():
+        target_dir = Path(str(output_dir).strip()).expanduser()
+        if not target_dir.is_absolute():
+            target_dir = (BACKEND_DIR.parent / target_dir).resolve()
+    else:
+        target_dir = SESSIONS_DIR
+
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True, exist_ok=True)
     import re
     ts: str = datetime.now().strftime("%Y%m%d_%H%M%S")
     base: str = re.sub(r"[^0-9a-zA-Z_-]+", "_", username or "live")
     out_name: str = filename if filename else f"{base}_session_{ts}.csv"
-    out_path: Path = SESSIONS_DIR / out_name
+    out_path: Path = target_dir / out_name
 
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
@@ -401,12 +410,14 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
 
     samples: List[float] = []
     start_dt: datetime = datetime.now()
+    sfreq: float = 100.0
+    raw_for_stages: Optional[np.ndarray] = None
     
     # --- HANDLE ENCRYPTED .EEG FILES ---
     if path.suffix.lower() == ".eeg":
         session_data: Dict[str, Any] = crypto_ops.decrypt_session(session_id)
         raw_samples: List[float] = session_data.get("samples", [])
-        sfreq: float = session_data.get("sampling_rate", 100.0)
+        sfreq = float(session_data.get("sampling_rate", 100.0))
         ts_str: str = session_data.get("Time", "")
         
         try:
@@ -414,6 +425,8 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
         except ValueError:
             start_dt = datetime.now()
             
+        if raw_samples:
+            raw_for_stages = np.asarray(raw_samples, dtype=np.float64)
         # Downsample to ~1Hz for review mode performance
         step: int = max(1, int(round(sfreq)))
         samples = [float(raw_samples[i]) for i in range(0, len(raw_samples), step)]
@@ -425,6 +438,7 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
         max_samples: int = min(header['num_records'] * header['samples_per_record'][0], 24 * 3600 * 512) if header['num_records'] > 0 else 500000
         
         samples_arr, sfreq, _ = read_edf_samples(str(path), channel_idx=0, max_samples=max_samples)
+        raw_for_stages = np.asarray(samples_arr, dtype=np.float64)
         step = max(1, int(round(sfreq)))
         samples = [float(samples_arr[i]) for i in range(0, len(samples_arr), step)]
         
@@ -443,28 +457,12 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
     start_ms: int = int(start_dt.timestamp() * 1000)
     timestamps_ms: List[int] = [start_ms + i * 1000 for i in range(len(samples))]
     
-    # Build mock sleep stages (to populate the frontend UI components)
     duration_ms: int = len(samples) * 1000
     end_ts: int = start_ms + duration_ms
-    stage_sequence: List[Dict[str, Any]] = [
-        {"type": "awake", "duration": 0.1}, {"type": "light", "duration": 0.3},
-        {"type": "deep", "duration": 0.25}, {"type": "light", "duration": 0.15},
-        {"type": "rem", "duration": 0.2},
-    ]
-    stages_out: List[Dict[str, Any]] = []
-    t: int = start_ms
-    idx: int = 0
-    while t < end_ts:
-        st: Dict[str, Any] = stage_sequence[idx % len(stage_sequence)]
-        stage_end: float = min(t + duration_ms * st["duration"], end_ts)
-        stages_out.append({
-            "type": st["type"],
-            "startTime": dt.datetime.utcfromtimestamp(t / 1000).isoformat() + "Z",
-            "endTime": dt.datetime.utcfromtimestamp(stage_end / 1000).isoformat() + "Z",
-            "duration": (stage_end - t) / (60 * 1000),
-        })
-        t = int(stage_end)
-        idx += 1
+    if raw_for_stages is not None and raw_for_stages.size >= 2:
+        stages_out = compute_sleep_stages_amplitude(raw_for_stages, sfreq, start_ms, session_end_ms=end_ts)
+    else:
+        stages_out = []
         
     return {
         "success": True, 
