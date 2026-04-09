@@ -339,26 +339,36 @@
 .dashboard-left {
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
-.dashboard-left .session-panel {
+/* Live mode: sessions should consume remaining left-column height */
+.dashboard-left .session-panel:not(.review-mode) {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
 }
 
 /* Keep acquisition actions (Export CSV) always reachable */
-.dashboard-left .acquisition-panel {
+.dashboard-left .sleep-status-card + .acquisition-panel,
+.dashboard-left .session-panel:not(.review-mode) + .acquisition-panel {
   flex: 0 0 auto;
   position: sticky;
   bottom: 0;
   z-index: 5;
 }
 
-.dashboard-left .acquisition-panel.visualization-panel {
+.dashboard-left .sleep-status-card + .acquisition-panel.visualization-panel,
+.dashboard-left .session-panel:not(.review-mode) + .acquisition-panel.visualization-panel {
   /* Prevent the sticky card from visually blending with content behind it */
   background: rgba(15, 23, 42, 0.96);
   backdrop-filter: blur(10px);
+}
+
+/* Review mode: keep natural panel heights and avoid stretched empty area */
+.dashboard-left .session-panel.review-mode,
+.dashboard-left .session-panel.review-mode + .acquisition-panel {
+  flex: 0 0 auto;
 }
 
 /* Let the activity log use leftover height in the sidebar */
