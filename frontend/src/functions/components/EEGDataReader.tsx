@@ -286,7 +286,7 @@ const EEGDataReader: React.FC = () => {
     
     try {
       // Get EDF info first
-      const infoResponse = await fetch('http://localhost:5000/api/edf/info');
+      const infoResponse = await fetch('/api/edf/info');
       const infoData = await infoResponse.json();
       
       if (!infoData.success) {
@@ -321,7 +321,7 @@ const EEGDataReader: React.FC = () => {
       setIsStreamingEDF(true);
       
       // Connect to Python real-time plot stream - matplotlib updates every second
-      const plotStream = new EventSource('http://localhost:5000/api/edf/plot/stream');
+      const plotStream = new EventSource('/api/edf/plot/stream');
       plotStreamRef.current = plotStream;
       plotStream.onmessage = (event) => {
         try {
@@ -347,7 +347,7 @@ const EEGDataReader: React.FC = () => {
       };
       
       // Connect to real-time data stream (for sample count display)
-      const eventSource = new EventSource('http://localhost:5000/api/edf/stream');
+      const eventSource = new EventSource('/api/edf/stream');
       edfEventSourceRef.current = eventSource;
       
       let sampleCount = 0;
@@ -427,7 +427,7 @@ const EEGDataReader: React.FC = () => {
     // Simulate authentication delay
     await new Promise(resolve => setTimeout(resolve, 800));
     try {
-      const response = await fetch('http://localhost:5000/api/login', {
+      const response = await fetch('/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

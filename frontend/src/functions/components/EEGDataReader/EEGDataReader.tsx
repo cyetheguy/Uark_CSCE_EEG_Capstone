@@ -138,7 +138,7 @@ const EEGDataReader: React.FC = () => {
   const handleScanDebug = async () => {
     updates.addUpdate('Sending debug scan request to EEG device...');
     try {
-      const response = await fetch('http://localhost:5000/api/device/scan', {
+      const response = await fetch('/api/device/scan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +169,7 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Saving encrypted sleep session (.eeg) to server...');
 
     try {
-      const response = await fetch('http://localhost:5000/api/sessions/save', {
+      const response = await fetch('/api/sessions/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -203,7 +203,7 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Exporting live session to CSV (backend/sessions)...');
 
     try {
-      const response = await fetch('http://localhost:5000/api/live/export', {
+      const response = await fetch('/api/live/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

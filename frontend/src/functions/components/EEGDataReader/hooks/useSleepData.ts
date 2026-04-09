@@ -152,7 +152,7 @@ export const useSleepData = () => {
     console.log(`Initializing stream (mode=${modeParam})...`);
 
     try {
-      const infoResponse = await fetch(`http://localhost:5000/api/edf/info?username=${encodeURIComponent(username)}&mode=${modeParam}`);
+      const infoResponse = await fetch(`/api/edf/info?username=${encodeURIComponent(username)}&mode=${modeParam}`);
       const infoData = await infoResponse.json();
       
       if (!infoData.success) {
@@ -187,7 +187,7 @@ export const useSleepData = () => {
         edfEventSourceRef.current.close();
       }
 
-      const streamUrl = `http://localhost:5000/api/edf/stream?mode=${modeParam}`;
+      const streamUrl = `/api/edf/stream?mode=${modeParam}`;
       console.log("Connecting to EventSource:", streamUrl);
       const eventSource = new EventSource(streamUrl);
       edfEventSourceRef.current = eventSource;
@@ -246,7 +246,7 @@ export const useSleepData = () => {
   const fetchSessionList = useCallback(async () => {
     setIsLoadingSessions(true);
     try {
-      const res = await fetch('http://localhost:5000/api/sessions/list');
+      const res = await fetch('/api/sessions/list');
       const data = await res.json();
       if (!data.success) {
         setSessionList([]);
@@ -279,7 +279,7 @@ export const useSleepData = () => {
   const loadSessionData = useCallback(async (sessionId: string) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/sessions/${encodeURIComponent(sessionId)}/data`);
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/data`);
       const data = await res.json();
       if (!data.success || !data.timestamps || !data.channelData) {
         console.error('Failed to load session:', data.error);
