@@ -139,6 +139,14 @@ if !DEBUG_MODE!==1 (
 echo ========================================
 echo.
 
+:: GitHub status
+echo GitHub Updates (--update) {
+git init
+git fetch
+git branch -vv
+echo }
+
+
 :: Start backend in a new window
 start "DreamRT Backend" cmd /k %PYTHON_CMD% backend\main.py %*
 
