@@ -4,8 +4,9 @@ import json
 import time
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Union
+import logging
 
-from flask import Flask, request, jsonify, send_file, Response
+from flask import Flask, request, jsonify, send_file, Response, cli
 from flask_cors import CORS
 
 import debug
@@ -228,6 +229,12 @@ if __name__ == "__main__":
 
     print("Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
     print(f"Sessions directory: {SESSIONS_DIR.absolute()}")
+
+
+    cli.show_server_banner = lambda *args: None
+    log = logging.getLogger('werkzeug')
+    log.disabled = True
+    log.setLevel(logging.ERROR)
 
     ble_comms.launch_desktop_client()
     app.run(debug=True, port=5000, use_reloader=False)
