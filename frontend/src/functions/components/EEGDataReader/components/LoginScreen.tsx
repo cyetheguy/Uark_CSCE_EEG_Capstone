@@ -26,6 +26,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [createError, setCreateError] = useState('');
 
+  // Check if Vite passed the debug flag
+  const isDebugMode = import.meta.env.VITE_DEBUG_MODE === 'true';
+
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError('');
@@ -73,7 +76,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     <div className="login-container">
       <div className="login-card">
         
-        {/* Brand Logo moved INSIDE the white box, above the text */}
+        {/* Brand Logo inside the white box */}
         <img 
           src={logoImg} 
           alt="DreamRT Logo" 
@@ -145,17 +148,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           </p>
         </div>
         
-        <div className="demo-credentials">
-          <p><strong>Demo Credentials:</strong></p>
-          <div className="credential-pair">
-            <span>Username: <code>demo</code></span>
-            <span>Password: <code>sleep123</code></span>
+        {/* Only show Demo Credentials if VITE_DEBUG_MODE is true */}
+        {isDebugMode && (
+          <div className="demo-credentials">
+            <p><strong>Demo Credentials:</strong></p>
+            <div className="credential-pair">
+              <span>Username: <code>demo</code></span>
+              <span>Password: <code>sleep123</code></span>
+            </div>
+            <div className="credential-pair">
+              <span>Username: <code>admin</code></span>
+              <span>Password: <code>admin123</code></span>
+            </div>
           </div>
-          <div className="credential-pair">
-            <span>Username: <code>admin</code></span>
-            <span>Password: <code>admin123</code></span>
-          </div>
-        </div>
+        )}
         
         <div className="login-footer">
           <p>Analyze whole night sleep EEG data with automatic sleep stage detection.</p>
