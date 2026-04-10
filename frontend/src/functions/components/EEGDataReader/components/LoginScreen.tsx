@@ -88,7 +88,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         />
 
         <div className="login-header">
-          <h1>DreamT</h1>
+          <h1>DreamRT</h1>
           <p>Whole Night Sleep Session Visualization</p>
         </div>
         

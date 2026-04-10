@@ -64,7 +64,7 @@ def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
         if proc.stdout is None:
             return
         for line in proc.stdout:
-            print(f"[Desktop] {line}", end="", flush=True)
+            printDebug(f"[Desktop] {line}", end="", flush=True)
             raw_hex, value = _parse_hex_value_line(line)
             if raw_hex is not None:
                 bluetooth_hex_lines.append({"raw": line.strip(), "hex": raw_hex})
@@ -100,10 +100,10 @@ def launch_desktop_client() -> bool:
             )
             t: threading.Thread = threading.Thread(target=_drain_desktop_stdout, args=(_desktop_proc,), daemon=True)
             t.start()
-            print(f"[Desktop] main.exe started (PID {_desktop_proc.pid})")
+            printDebug(f"[Desktop] main.exe started (PID {_desktop_proc.pid})")
             return True
         except Exception as e:
-            print(f"[Desktop] Failed to start main.exe: {e}")
+            printDebug(f"[Desktop] Failed to start main.exe: {e}")
             return False
 
 def send_desktop_command(cmd: str) -> bool:
@@ -111,15 +111,15 @@ def send_desktop_command(cmd: str) -> bool:
     global _desktop_proc
     with _desktop_lock:
         if _desktop_proc is None or _desktop_proc.poll() is not None or _desktop_proc.stdin is None:
-            print("[Desktop] Process not running — cannot send command.")
+            printDebug("[Desktop] Process not running — cannot send command.")
             return False
         try:
             _desktop_proc.stdin.write(cmd.strip() + "\n")
             _desktop_proc.stdin.flush()
-            print(f"[Desktop] Sent command: {cmd.strip()}")
+            printDebug(f"[Desktop] Sent command: {cmd.strip()}")
             return True
         except Exception as e:
-            print(f"[Desktop] Error sending command '{cmd}': {e}")
+            printDebug(f"[Desktop] Error sending command '{cmd}': {e}")
             return False
 
 def stream_live_data() -> Generator[str, None, None]:

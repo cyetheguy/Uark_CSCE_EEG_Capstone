@@ -227,8 +227,8 @@ if __name__ == "__main__":
         if arg == "--debug-gui": 
             debug.setDebug(debug.DEBUG | debug.GUI)
 
-    print("Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
-    print(f"Sessions directory: {SESSIONS_DIR.absolute()}")
+    print("DreamRT Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
+    printDebug(f"Sessions directory: {SESSIONS_DIR.absolute()}")
 
 
     cli.show_server_banner = lambda *args: None

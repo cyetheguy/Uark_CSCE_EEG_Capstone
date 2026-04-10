@@ -20,7 +20,7 @@ const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header">
       <div className="header-left">
-        <h1>DreamT</h1>
+        <h1>DreamRT</h1>
         <p className="user-info">Logged in as: <strong>{username}</strong></p>
       </div>
       <div className="header-center">
