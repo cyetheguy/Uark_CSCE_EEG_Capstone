@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import logoImg from '../../../../../../media/DreamRT_SQRE_wp.png';
 
 interface LoginScreenProps {
   username: string;
@@ -71,6 +72,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   return (
     <div className="login-container">
       <div className="login-card">
+        
+        {/* Brand Logo moved INSIDE the white box, above the text */}
+        <img 
+          src={logoImg} 
+          alt="DreamRT Logo" 
+          style={{ 
+            width: '150px', 
+            display: 'block', 
+            margin: '0 auto 15px auto' 
+          }} 
+        />
+
         <div className="login-header">
           <h1>DreamT</h1>
           <p>Whole Night Sleep Session Visualization</p>
