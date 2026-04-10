@@ -16,6 +16,10 @@ function getViewportScale(): number {
   if (typeof window === 'undefined') return 1;
   const w = window.innerWidth;
   const h = window.innerHeight;
+  
+  // Disable mathematical scaling on mobile/tablet widths
+  if (w <= 1024) return 1; 
+
   if (w <= 0 || h <= 0) return 1;
   // Do not scale above 1 so the analyzer doesn't start overly zoomed-in on large displays
   return Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT, 1);
@@ -275,8 +279,8 @@ const EEGDataReader: React.FC = () => {
     });
   };
 
-  // Scale-to-fit wrapper so all aspects stay visible at any screen size or zoom
-  const viewportStyle = { transform: `scale(${scale})` };
+  // Scale-to-fit wrapper so all aspects stay visible at any screen size or zoom. Only apply on desktop.
+  const viewportStyle = window.innerWidth > 1024 ? { transform: `scale(${scale})`, transformOrigin: 'top center' } : {};
 
   // Render Login Screen (inside scaled viewport)
   if (!auth.isAuthenticated) {

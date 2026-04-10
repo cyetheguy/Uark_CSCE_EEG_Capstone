@@ -283,7 +283,7 @@
   bottom: 0;
   overflow: hidden;
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* FIX: Pins the app to the absolute top of the screen */
   justify-content: center;
   background: var(--bg-primary, #0b1220);
 }
@@ -293,7 +293,7 @@
   width: 1600px;
   height: 1000px;
   flex-shrink: 0;
-  transform-origin: center center;
+  transform-origin: top center !important; /* FIX: Forces the app to scale downwards from the top edge */
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1919,4 +1919,86 @@ table td {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1rem;
+}
+
+/* =========================================
+   Mobile & Tablet Responsive Design
+   FIX: Removed fixed constraints to allow natural mobile scrolling
+========================================= */
+@media (max-width: 1024px) {
+  /* Release the fixed desktop wrapper dimensions */
+  .eeg-app-scale-wrapper {
+    position: relative !important; /* CRITICAL FIX: Was 'fixed', locking the screen */
+    display: block !important;     /* Removes flex centering that hid the top */
+    overflow-y: auto !important;   /* Allows browser scrolling */
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh;
+    transform: none !important;
+    overflow-x: hidden;
+  }
+
+  .eeg-app-viewport {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100vh;
+    transform: none !important;
+    overflow-x: hidden;
+    box-shadow: none; /* Remove desktop shadow */
+  }
+
+  /* Make the app container fill the screen and grow naturally */
+  .app-container {
+    display: block; /* Drop flex layout for mobile body */
+    width: 100%;
+    height: auto !important; 
+    min-height: 100vh;
+  }
+
+  /* Remove internal scroll containers */
+  .main-content {
+    height: auto !important;
+    overflow: visible !important;
+    padding-bottom: 2rem; /* Add breathing room at bottom */
+  }
+
+  /* Stack the dashboard grid vertically */
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 10px;
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+
+  /* Ensure all sections take full width */
+  .dashboard-left, 
+  .dashboard-center, 
+  .dashboard-right {
+    width: 100%;
+    max-width: 100%;
+    height: auto !important;
+    min-height: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Release the sticky behavior from panels so they don't block scroll */
+  .dashboard-left .sleep-status-card + .acquisition-panel,
+  .dashboard-left .session-panel:not(.review-mode) + .acquisition-panel {
+    position: static !important;
+  }
+
+  /* Allow activity logs to expand slightly but cap them */
+  .dashboard-left .updates-panel,
+  .dashboard-right .updates-panel {
+    max-height: 400px; 
+  }
+  
+  /* Make charts scale properly */
+  .graph-container {
+    height: 350px !important; 
+  }
 }
