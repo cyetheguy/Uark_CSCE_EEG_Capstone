@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import EEGChart from './EEGChart';
 import { SleepSessionData, AppSettings, ChartDataPoint, EDFStreamState } from '../types';
 import { 
@@ -47,25 +47,37 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
   timeView,
   selectedSleepStage,
   onShowRawDataChange,
-  onShowRawDataChange: onShowRawDataChangeProp, 
   onTimeViewChange,
   onSelectedSleepStageChange,
   getChartData
 }) => {
   const [hoverData, setHoverData] = useState<{ value: number; time: string; stage: string } | null>(null);
-  const [isInteracting, setIsInteracting] = useState(false);
+  
+  // Split interaction into hovering (temporary) and scrubbing/paused (persistent)
+  const [isHovering, setIsHovering] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [manualScrollIndex, setManualScrollIndex] = useState<number>(0);
 
   // 60-second (1 minute) time window
   const LIVE_WINDOW_MS = 60 * 1000;
   const currentDataLength = selectedSession?.channelData.length || 0;
 
+  // Keep manualScrollIndex up to date with the live edge when NOT paused or hovering
+  useEffect(() => {
+    if (!isPaused && !isHovering && currentDataLength > 0) {
+      setManualScrollIndex(currentDataLength - 1);
+    }
+  }, [currentDataLength, isPaused, isHovering]);
+
   const { startIndex, endIndex, windowSize } = useMemo(() => {
     if (currentDataLength === 0) return { startIndex: 0, endIndex: 0, windowSize: 0 };
     const timestamps = selectedSession!.timestamps;
-    const endIdx = isInteracting
+    
+    // Use manual index if paused by slider OR paused by hovering
+    const endIdx = (isPaused || isHovering)
       ? Math.min(manualScrollIndex, currentDataLength - 1)
       : currentDataLength - 1;
+      
     const endTime = timestamps[endIdx].getTime();
     const startTime = endTime - LIVE_WINDOW_MS;
     let startIdx = 0;
@@ -76,7 +88,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
       }
     }
     return { startIndex: startIdx, endIndex: endIdx, windowSize: endIdx - startIdx + 1 };
-  }, [selectedSession, isInteracting, manualScrollIndex, currentDataLength]);
+  }, [selectedSession, isPaused, isHovering, manualScrollIndex, currentDataLength]);
 
   const realTimeData = useMemo(() => {
     if (!selectedSession || currentDataLength === 0 || windowSize === 0) return [];
@@ -105,8 +117,16 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
   }, [selectedSession, startIndex, endIndex, windowSize, currentDataLength, getSleepStageAtTime]);
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsInteracting(true);
-    setManualScrollIndex(Math.min(parseInt(e.target.value, 10), currentDataLength - 1));
+    const val = parseInt(e.target.value, 10);
+    const safeVal = Math.min(val, currentDataLength - 1);
+    setManualScrollIndex(safeVal);
+    
+    // Auto-resume if they drag the slider to the very end
+    if (safeVal >= currentDataLength - 1) {
+      setIsPaused(false);
+    } else {
+      setIsPaused(true);
+    }
   };
 
   // Helper for Quality Text
@@ -151,8 +171,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
               
               <div className="graph-scale" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {isInteracting ? (
-                     <span className="stream-status stream-status-paused">Paused</span>
+                  {(isPaused || isHovering) ? (
+                     <span 
+                       className="stream-status stream-status-paused"
+                       style={{ cursor: isPaused ? 'pointer' : 'default' }}
+                       onClick={() => setIsPaused(false)}
+                       title={isPaused ? "Click to resume live stream" : ""}
+                     >
+                       {isPaused ? "Paused (Resume)" : "Paused"}
+                     </span>
                   ) : (
                      <span className="stream-status stream-status-live">Live</span>
                   )}
@@ -194,8 +221,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                 height: '400px', padding: '1rem', backgroundColor: 'var(--bg-primary)', 
                 borderRadius: '8px 8px 0 0', overflow: 'hidden', position: 'relative' 
               }}
-              onMouseEnter={() => setIsInteracting(true)}
-              onMouseLeave={() => { setHoverData(null); setIsInteracting(false); }}
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => { setHoverData(null); setIsHovering(false); }}
             >
               {realTimeData.length === 0 ? (
                 <div className="graph-empty-state">Acquiring signal…</div>
@@ -318,7 +345,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                 max={Math.max(0, currentDataLength - 1)}
                 value={endIndex}
                 onChange={handleSliderChange}
-                onMouseDown={() => setIsInteracting(true)}
+                onMouseDown={() => setIsPaused(true)}
                 style={{ width: '100%', cursor: 'pointer' }}
               />
             </div>
