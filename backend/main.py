@@ -10,7 +10,6 @@ from flask import Flask, request, jsonify, send_file, Response, cli
 from flask_cors import CORS
 
 import debug
-from debug import printDebug
 import crypto_ops
 import ble_comms
 import data_processor
@@ -195,8 +194,8 @@ def get_session_data(session_id: str) -> Tuple[Response, int]:
 
 @app.route('/api/device/scan', methods=['POST'])
 def device_scan() -> Tuple[Response, int]:
-    data: Dict[str, Any] = request.get_json(silent=True) or {}
-    cmd: str = "scan --debug" if data.get("debug") else "scan"
+    """Desktop main.exe only accepts a single token per line (see Desktop.cpp); always send 'scan'."""
+    cmd: str = "scan"
     
     if ble_comms.send_desktop_command(cmd):
         return jsonify({"success": True, "message": "scan sent to Desktop client"}), 200
@@ -222,19 +221,21 @@ def get_edf_info() -> Tuple[Response, int]:
 
 if __name__ == "__main__":
     for arg in sys.argv[1:]:
-        if arg == "--debug": 
+        if arg == "--debug":
             debug.setDebug(debug.DEBUG)
-        if arg == "--debug-gui": 
+        if arg == "--debug-gui":
             debug.setDebug(debug.DEBUG | debug.GUI)
 
     print("DreamRT Back end running\n\tDO NOT CLOSE THIS WINDOW!!!")
-    printDebug(f"Sessions directory: {SESSIONS_DIR.absolute()}")
-
-
-    cli.show_server_banner = lambda *args: None
-    log = logging.getLogger('werkzeug')
-    log.disabled = True
-    log.setLevel(logging.ERROR)
+    if debug.getDebug():
+        print(f"Sessions directory: {SESSIONS_DIR.absolute()}")
+        _edf_list = list(SESSIONS_DIR.glob("*.edf"))
+        print(f"Found {len(_edf_list)} EDF file(s) in sessions directory")
+    else:
+        cli.show_server_banner = lambda *args: None
+        _wk = logging.getLogger("werkzeug")
+        _wk.disabled = True
+        _wk.setLevel(logging.ERROR)
 
     ble_comms.launch_desktop_client()
-    app.run(debug=True, port=5000, use_reloader=False)
+    app.run(debug=bool(debug.getDebug()), port=5000, use_reloader=False)

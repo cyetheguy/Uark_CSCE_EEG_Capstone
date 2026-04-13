@@ -7,7 +7,7 @@ from collections import deque
 from pathlib import Path
 from typing import Tuple, List, Optional, Dict, Any, Generator
 
-from debug import printDebug
+from debug import getDebug
 
 BLUETOOTH_HEX_MAX_LINES: int = 500
 BLUETOOTH_SAMPLES_MAX: int = 100_000
@@ -23,6 +23,13 @@ DESKTOP_EXE: Path = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "
 
 _desktop_proc: Optional[subprocess.Popen] = None
 _desktop_lock: threading.Lock = threading.Lock()
+
+
+def _desktop_log(msg: str, *, end: str = "\n", flush: bool = True) -> None:
+    """Mirror Desktop client activity in the backend console only when started with --debug."""
+    if getDebug():
+        print(msg, end=end, flush=flush)
+
 
 def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
     """If line is 'Value (02x hex): XXYY...', return (raw_hex_str, parsed_float_or_none)."""
@@ -64,7 +71,7 @@ def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
         if proc.stdout is None:
             return
         for line in proc.stdout:
-            printDebug(f"[Desktop] {line}", end="", flush=True)
+            _desktop_log(f"[Desktop] {line}", end="", flush=True)
             raw_hex, value = _parse_hex_value_line(line)
             if raw_hex is not None:
                 bluetooth_hex_lines.append({"raw": line.strip(), "hex": raw_hex})
@@ -81,11 +88,11 @@ def launch_desktop_client() -> bool:
     global _desktop_proc
     with _desktop_lock:
         if _desktop_proc is not None and _desktop_proc.poll() is None:
-            printDebug("Desktop client already running.")
+            _desktop_log("Desktop client already running.")
             return True
 
         if not DESKTOP_EXE.exists():
-            print(f"[Desktop] WARNING: {DESKTOP_EXE} not found — build it with buildDesk.bat")
+            _desktop_log(f"[Desktop] WARNING: {DESKTOP_EXE} not found — build it with buildDesk.bat")
             return False
 
         try:
@@ -100,10 +107,10 @@ def launch_desktop_client() -> bool:
             )
             t: threading.Thread = threading.Thread(target=_drain_desktop_stdout, args=(_desktop_proc,), daemon=True)
             t.start()
-            printDebug(f"[Desktop] main.exe started (PID {_desktop_proc.pid})")
+            _desktop_log(f"[Desktop] main.exe started (PID {_desktop_proc.pid})")
             return True
         except Exception as e:
-            printDebug(f"[Desktop] Failed to start main.exe: {e}")
+            _desktop_log(f"[Desktop] Failed to start main.exe: {e}")
             return False
 
 def send_desktop_command(cmd: str) -> bool:
@@ -111,15 +118,15 @@ def send_desktop_command(cmd: str) -> bool:
     global _desktop_proc
     with _desktop_lock:
         if _desktop_proc is None or _desktop_proc.poll() is not None or _desktop_proc.stdin is None:
-            printDebug("[Desktop] Process not running — cannot send command.")
+            _desktop_log("[Desktop] Process not running — cannot send command.")
             return False
         try:
             _desktop_proc.stdin.write(cmd.strip() + "\n")
             _desktop_proc.stdin.flush()
-            printDebug(f"[Desktop] Sent command: {cmd.strip()}")
+            _desktop_log(f"[Desktop] Sent command: {cmd.strip()}")
             return True
         except Exception as e:
-            printDebug(f"[Desktop] Error sending command '{cmd}': {e}")
+            _desktop_log(f"[Desktop] Error sending command '{cmd}': {e}")
             return False
 
 def stream_live_data() -> Generator[str, None, None]:
