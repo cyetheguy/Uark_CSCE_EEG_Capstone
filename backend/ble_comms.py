@@ -18,11 +18,14 @@ bluetooth_samples: List[float] = []
 bluetooth_samples_lock: threading.Lock = threading.Lock()
 
 _HEX_LINE_PREFIX: str = "Value (02x hex): "
+_HEX_ANYWHERE_RE: re.Pattern[str] = re.compile(r"Value \(02x hex\):\s*([0-9a-fA-F\s]*)")
+_HEX_ONLY_LINE_RE: re.Pattern[str] = re.compile(r"^\s*([0-9a-fA-F]+)\s*$")
 BACKEND_DIR: Path = Path(__file__).parent
 DESKTOP_EXE: Path = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "main.exe"
 
 _desktop_proc: Optional[subprocess.Popen] = None
 _desktop_lock: threading.Lock = threading.Lock()
+_awaiting_split_hex_payload: bool = False
 
 
 def _desktop_log(msg: str, *, end: str = "\n", flush: bool = True) -> None:
@@ -53,6 +56,18 @@ def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
         return raw_hex, float(s.strip())
     except (ValueError, UnicodeDecodeError):
         pass
+
+    # Firmware binary frame support:
+    # observed payload shape: 01 01 <ch1_lo> <ch1_hi> <ch2_lo> <ch2_hi>
+    # where first two bytes are a frame marker/version.
+    # ch1 has looked like a ramp/counter in live tests, so use ch2 for EEG.
+    if len(raw_bytes) >= 4 and raw_bytes[0] == 0x01 and raw_bytes[1] == 0x01:
+        import struct
+        if len(raw_bytes) >= 6:
+            primary_value: int = struct.unpack_from("<h", raw_bytes, 4)[0]
+        else:
+            primary_value = struct.unpack_from("<h", raw_bytes, 2)[0]
+        return raw_hex, float(primary_value)
         
     if len(raw_bytes) >= 2:
         import struct
@@ -66,20 +81,38 @@ def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
 
 def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
     """Read stdout from main.exe; print it and capture hex lines / parsed samples."""
-    global bluetooth_hex_lines, bluetooth_samples
+    global bluetooth_hex_lines, bluetooth_samples, _awaiting_split_hex_payload
     try:
         if proc.stdout is None:
             return
         for line in proc.stdout:
             _desktop_log(f"[Desktop] {line}", end="", flush=True)
-            raw_hex, value = _parse_hex_value_line(line)
-            if raw_hex is not None:
-                bluetooth_hex_lines.append({"raw": line.strip(), "hex": raw_hex})
-            if value is not None:
-                with bluetooth_samples_lock:
-                    bluetooth_samples.append(value)
-                    if len(bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
-                        bluetooth_samples.pop(0)
+            # Desktop logs can interleave lines (BM71 debug + Value lines), so parse
+            # Value payloads even when split across lines.
+            line_candidates: List[Tuple[str, str]] = []
+            for m in _HEX_ANYWHERE_RE.finditer(line):
+                payload: str = m.group(1).strip()
+                if payload:
+                    line_candidates.append((line.strip(), payload))
+                else:
+                    _awaiting_split_hex_payload = True
+
+            if _awaiting_split_hex_payload and not line_candidates:
+                m_only = _HEX_ONLY_LINE_RE.match(line.strip())
+                if m_only:
+                    line_candidates.append((line.strip(), m_only.group(1)))
+                    _awaiting_split_hex_payload = False
+                elif line.strip():
+                    _awaiting_split_hex_payload = False
+
+            for raw_line, raw_hex in line_candidates:
+                bluetooth_hex_lines.append({"raw": raw_line, "hex": raw_hex})
+                _, value = _parse_hex_value_line(f"{_HEX_LINE_PREFIX}{raw_hex}")
+                if value is not None:
+                    with bluetooth_samples_lock:
+                        bluetooth_samples.append(value)
+                        if len(bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
+                            bluetooth_samples.pop(0)
     except Exception:
         pass
 
