@@ -5,6 +5,8 @@ const SETTINGS_KEY_PREFIX = 'eeg-sleep-settings';
 const GUEST_KEY = SETTINGS_KEY_PREFIX;
 
 function getStorageKey(username: string | null): string {
+  // Settings are stored per-username so different users can keep their own preferences
+  // on a shared machine. When no username is present we fall back to a shared "guest" key.
   const user = (username || '').trim();
   return user ? `${SETTINGS_KEY_PREFIX}-${user}` : GUEST_KEY;
 }
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 function mergeWithDefaults(partial: Partial<AppSettings> | null): AppSettings {
+  // Backward/forward compatible merge so older saved settings don't break when we add fields.
   if (!partial) return DEFAULT_SETTINGS;
   return {
     ...DEFAULT_SETTINGS,

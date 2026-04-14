@@ -7,6 +7,17 @@ GUI =           2 ** 1
 flag:int = 0
 
 
+"""
+Simple bitmask-based debug flags shared across backend modules.
+
+Usage:
+- `setDebug(DEBUG)` enables debug logging.
+- `setDebug(DEBUG | GUI)` enables debug + GUI-specific behavior.
+
+Design constraints:
+- Flags are only ever OR-ed in (enabled). There is intentionally no "unset" at runtime so
+  the backend can't accidentally disable logging midway through a run.
+"""
 
 ## Debug Print func : OR Flags together for multiple flag requirements
 def printDebug(msg:str, opCode=0) -> None:

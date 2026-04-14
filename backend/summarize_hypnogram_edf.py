@@ -14,6 +14,19 @@ from pathlib import Path
 
 
 def main() -> None:
+    """
+    This script reads an EDF+ hypnogram file (annotations-only) and totals up time per label.
+    
+    Why this exists:
+    - The project's runtime staging is amplitude-only and heuristic.
+    - This provides a "ground truth-ish" summary from the scored hypnogram that ships with Sleep-EDF,
+      which is useful for sanity-checking stage distributions.
+    
+    Notes:
+    - MNE provides a robust EDF+ annotations reader.
+    - Some hypnogram EDFs omit `duration` (or set it to 0). When that happens, Sleep-EDF uses 30s epochs,
+      so we default to 30 seconds.
+    """
     try:
         import mne
     except ImportError:

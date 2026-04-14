@@ -3,6 +3,12 @@ import { useState } from 'react';
 const AUTH_STORAGE_KEY = 'eeg_capstone_auth';
 
 function getStoredAuth(): { isAuthenticated: boolean; username: string } {
+  // We persist only the fact that the UI is "logged in" + the username, so that refreshing
+  // the page doesn't immediately bounce the user back to the login screen.
+  //
+  // Important: this is *UI state*, not a secure backend session token.
+  // The backend's ability to decrypt/encrypt `.eeg` sessions depends on `crypto_ops.USR_KEY`,
+  // which is established only when `/api/login` succeeds (and is lost on backend restart).
   try {
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!stored) return { isAuthenticated: false, username: '' };
@@ -36,6 +42,7 @@ export const useAuth = () => {
     setIsLoading(true);
     setLoginError('');
     
+    // Small delay to make the UI feel responsive (and to avoid "flash" on fast local calls).
     await new Promise(resolve => setTimeout(resolve, 800));
     try {
       const response = await fetch('/api/login', {
@@ -66,6 +73,8 @@ export const useAuth = () => {
   };
 
   const handleLogout = () => {
+    // UI logout only clears local state/storage. Backend keying is reset on backend restart
+    // or by simply logging in as a different user.
     setIsAuthenticated(false);
     setUsername('');
     setPassword('');

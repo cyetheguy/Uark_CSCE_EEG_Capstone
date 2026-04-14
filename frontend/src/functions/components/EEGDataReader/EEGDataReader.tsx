@@ -1,10 +1,20 @@
-// This is the main application that manages the state:
-// connection, data, UI preferences
-
-// Coordinates between services and display components
-
-// Timestamps show actual data collection time
-// Data updates automatically via WebSocket (Maybe Bluetooth goes to .csv file first?)
+/**
+ * `EEGDataReader` is the top-level container for the DreamRT UI.
+ *
+ * High-level data flow:
+ * - Login (frontend) → `/api/login` (backend) establishes the in-process encryption key (USR_KEY)
+ * - Live mode:
+ *   - `/api/device/scan` / `/api/device/connect` (optional) talk to the Desktop BLE bridge
+ *   - `/api/edf/stream?mode=live` streams raw samples over SSE for the UI
+ *   - The UI down-samples the plot to ~1 point/sec for rendering and periodically recomputes sleep stages
+ * - Review mode:
+ *   - `/api/sessions/list` returns decryptable `.eeg` sessions + optional demo `.edf` files
+ *   - `/api/sessions/:id/data` returns downsampled samples + sleep stage segments for display
+ *
+ * Component responsibilities:
+ * - This file wires together "model" hooks (`useAuth`, `useSettings`, `useSleepData`, `useUpdates`)
+ *   and renders the panels. Most heavy lifting happens inside those hooks.
+ */
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import './EEGDataReader.css';
 
@@ -70,7 +80,9 @@ const EEGDataReader: React.FC = () => {
   const sleepData = useSleepData();
   const updates = useUpdates(settings.settings);
 
-  // Effects: Live = BLE stream (default); Review = encrypted session list from server (decrypt in backend)
+  // Mode switch is the main "state machine" of the app:
+  // - live → start SSE acquisition
+  // - review → stop SSE and populate sessions list
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     if (mode === 'live') {
@@ -143,6 +155,8 @@ const EEGDataReader: React.FC = () => {
   const handleScanDebug = async () => {
     updates.addUpdate('Sending debug scan request to EEG device...');
     try {
+      // Sends "scan" to the Desktop BLE bridge. The bridge prints scan results to stdout,
+      // which the backend can surface via `/api/bluetooth/hex` for troubleshooting.
       const response = await fetch('/api/device/scan', {
         method: 'POST',
         headers: {
@@ -166,6 +180,8 @@ const EEGDataReader: React.FC = () => {
 
   /** Saves BLE buffer to an encrypted .eeg using the logged-in user's key (backend USR_KEY from /api/login). */
   const handleSaveEncryptedSession = async () => {
+    // Note: we don't upload samples from the browser. The backend encrypts whatever it has buffered
+    // from the BLE stream (`ble_comms.bluetooth_samples`).
     if (!sleepData.selectedSession || !sleepData.selectedSession.channelData.length) {
       updates.addUpdate('❌ No live data to save yet');
       return;

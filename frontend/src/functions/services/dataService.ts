@@ -1,6 +1,20 @@
 import { DataPoint, ModbusData, SliderData } from '../dataTypes';
 
-// CSV and local data only (Solid Pod functionality removed)
+/**
+ * Local-only data loader used by older tooling/UI pieces.
+ *
+ * Context:
+ * - This service predates the DreamRT live BLE streaming flow.
+ * - It reads a CSV where each row is either Modbus-like telemetry or slider telemetry.
+ * - The "Solid Pod" (remote storage) integration was removed; this is now strictly `fetch(filepath)`.
+ *
+ * CSV format (header + rows):
+ *   timestamp,deviceId,dataType,registerOrId,value,functionOrRawMessage
+ *
+ * Where:
+ * - dataType = "modbus" → parsed into `ModbusData`
+ * - dataType = "slider" → parsed into `SliderData`
+ */
 
 export class DataService {
   private csvData: DataPoint[] = [];

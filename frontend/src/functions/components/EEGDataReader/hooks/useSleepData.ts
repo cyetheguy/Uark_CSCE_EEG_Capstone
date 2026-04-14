@@ -2,6 +2,20 @@ import { useState, useCallback, useRef } from 'react';
 import { SleepSessionData, SleepStage, SessionMetadata, SleepStats, EDFStreamState } from '../types';
 import { computeSleepStagesFromAmplitude, EPOCH_SEC } from '../utils/sleepStagesFromAmplitude';
 
+/**
+ * Central "model" hook for the EEGDataReader UI.
+ *
+ * Responsibilities:
+ * - **Live mode**: connect to backend SSE (`/api/edf/stream?mode=live`) and incrementally append samples
+ * - **Review mode**: list and load sessions from backend (`/api/sessions/list`, `/api/sessions/:id/data`)
+ * - **Staging**: periodically recompute amplitude-only sleep stages from the growing raw buffer
+ * - **Stats**: compute user-facing summary numbers from stage segments
+ *
+ * Design notes:
+ * - The UI plot is intentionally *downsampled* to ~1 point/sec (to keep React/Recharts smooth).
+ * - The sleep-stage algorithm needs *raw-ish* dynamics, so we keep a separate `rawValues` array at the
+ *   backend sampling rate and only stage when we have at least one full 30s epoch.
+ */
 export const useSleepData = () => {
   const [sleepSessions, setSleepSessions] = useState<SleepSessionData[]>([]);
   const [selectedSession, setSelectedSession] = useState<SleepSessionData | null>(null);
@@ -18,6 +32,7 @@ export const useSleepData = () => {
   const liveStreamSfreqRef = useRef(100);
   const lastStageRecomputeMsRef = useRef(0);
 
+  // Throttle staging recomputation: recomputing on every incoming sample would be expensive.
   const STAGE_RECOMPUTE_MS = 2000;
 
   // AASM standard: one stage per 30-second epoch. Demo data still uses synthetic cycling below.
@@ -156,6 +171,8 @@ export const useSleepData = () => {
     console.log(`Initializing stream (mode=${modeParam})...`);
 
     try {
+      // Ask backend which file/source we are streaming and what sampling rate to assume.
+      // Live mode is fixed at ~100Hz in the backend; review mode reads from EDF metadata.
       const infoResponse = await fetch(`/api/edf/info?username=${encodeURIComponent(username)}&mode=${modeParam}`);
       const infoData = await infoResponse.json();
       
@@ -172,6 +189,8 @@ export const useSleepData = () => {
       const now = new Date();
       const sessionStart = new Date(now);
       sessionStart.setHours(22, 0, 0, 0);
+      // Live streams don't have an inherent wall-clock start time, so we anchor the display to
+      // a synthetic "10pm last night" for consistent charts/stats UI.
       
       const streamSession: SleepSessionData = {
         id: `edf_stream_${Date.now()}`,
@@ -193,6 +212,8 @@ export const useSleepData = () => {
         edfEventSourceRef.current.close();
       }
 
+      // Backend emits Server-Sent Events (SSE) packets:
+      //   data: {"value": <number>, "timestamp": <sec_since_stream_start>, "sample": <index>}
       const streamUrl = `/api/edf/stream?mode=${modeParam}`;
       console.log("Connecting to EventSource:", streamUrl);
       const eventSource = new EventSource(streamUrl);
@@ -238,6 +259,8 @@ export const useSleepData = () => {
             const nowMs = Date.now();
             if (nowMs - lastStageRecomputeMsRef.current >= STAGE_RECOMPUTE_MS) {
               lastStageRecomputeMsRef.current = nowMs;
+              // Staging returns *segments* (start/end/duration), not per-sample labels.
+              // We replace `streamSession.sleepStages` in-place to keep the session object stable.
               streamSession.sleepStages = computeSleepStagesFromAmplitude(rawValues, sf, sessionStart);
             }
           }

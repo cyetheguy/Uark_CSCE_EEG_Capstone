@@ -14,6 +14,15 @@ from sleep_stages_amplitude import compute_sleep_stages_amplitude
 
 
 def _parse_edf_start_ms(path: Path) -> int:
+    """
+    Convert EDF start date/time fields into a unix epoch timestamp in ms.
+
+    EDF uses a compact two-digit year (`dd.mm.yy`), so we map:
+    - yy >= 80 → 19yy
+    - yy < 80  → 20yy
+
+    This is "good enough" for Sleep-EDF demo files and keeps this script dependency-free.
+    """
     startdate, starttime, _ = get_edf_start_and_duration(path)
     try:
         day, month, yy = [int(x) if x.strip().isdigit() else 1 for x in startdate.split(".")]
@@ -28,6 +37,16 @@ def _parse_edf_start_ms(path: Path) -> int:
 
 
 def main() -> None:
+    """
+    Quick sanity check for the amplitude-only classifier against a known EDF file:
+    - Read the EDF header and cap the read length (avoid loading huge files in full)
+    - Compute stage segments from the full-rate signal (classifier expects raw dynamics)
+    - Print total minutes per stage
+
+    Notes:
+    - The classifier itself is heuristic; this script is for catching regressions / obvious failures,
+      not for clinical validation.
+    """
     psg = SESSIONS_DIR / "SC4001E0-PSG.edf"
     if not psg.exists():
         print(f"Skip: {psg} not found")
@@ -35,11 +54,13 @@ def main() -> None:
 
     with open(psg, "rb") as fh:
         header = read_edf_header(fh)
+    # Limit to <= 24h at <=128Hz for a fast offline run.
     cap = min(header["num_records"] * header["samples_per_record"][0], 24 * 3600 * 128)
     samples_arr, sfreq, label = read_edf_samples(str(psg), channel_idx=0, max_samples=int(cap))
     start_ms = _parse_edf_start_ms(psg)
     step = max(1, int(round(sfreq)))
     ds_len = len(range(0, len(samples_arr), step))
+    # The review payload uses ~1Hz timestamps; we match that so the last segment end-time aligns.
     end_ts = start_ms + ds_len * 1000
 
     stages = compute_sleep_stages_amplitude(samples_arr, sfreq, start_ms, session_end_ms=end_ts)
