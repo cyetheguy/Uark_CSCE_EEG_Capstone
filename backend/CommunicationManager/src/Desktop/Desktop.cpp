@@ -27,7 +27,7 @@ using std::string;
 
 int main(){    
 
-    cout << "Hello World" << endl;
+    cout << "Hello DreamR's" << endl;
 
     ConnectionManager CM;
     SecurityManager SM;
@@ -39,7 +39,7 @@ int main(){
     cout << "Please provide one of the following commands:" <<
             "\nScan [For discovering devices]" <<
             "\nStop [To stop discovering devices]" <<
-            "\nConnectaddress(DeviceAddress) [Connect to a device with bluetooth address]" <<
+            "\nConnectaddress(MAC) [Connect to a device by MAC address, ex: AA:BB:CC:DD:EE:FF]" <<
             "\nConnectUUID(UUID) [Connect to a device with a UUID]" <<
             "\nQuit [Quits the program]" <<
             "\nHelp [Relists all these commands]" << 
@@ -53,9 +53,15 @@ int main(){
 
         if(userInput == "connectaddress"){
 
-            cout << "Please provide address of device" << endl;
+            cout << "Please provide device MAC address (AA:BB:CC:DD:EE:FF)" << endl;
 
             cin >> userInput;
+            uint64_t addr = CM.stringToBluetoothAddress(userInput);
+            if(!addr){
+                cout << "MAC address was invalid, try connectaddress again (AA:BB:CC:DD:EE:FF)" << endl;
+            }else{
+                CM.connectToDeviceWithAddress(addr);
+            }
 
         }else if(userInput == "connectuuid"){
 

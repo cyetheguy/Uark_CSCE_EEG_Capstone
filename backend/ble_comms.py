@@ -5,7 +5,7 @@ import time
 import json
 from collections import deque
 from pathlib import Path
-from typing import Tuple, List, Optional, Dict, Any, Generator
+from typing import Tuple, List, Optional, Dict, Any, Generator, Sequence
 
 from debug import getDebug
 
@@ -127,6 +127,24 @@ def send_desktop_command(cmd: str) -> bool:
             return True
         except Exception as e:
             _desktop_log(f"[Desktop] Error sending command '{cmd}': {e}")
+            return False
+
+
+def send_desktop_commands(commands: Sequence[str]) -> bool:
+    """Send multiple commands to main.exe stdin in order."""
+    global _desktop_proc
+    with _desktop_lock:
+        if _desktop_proc is None or _desktop_proc.poll() is not None or _desktop_proc.stdin is None:
+            _desktop_log("[Desktop] Process not running — cannot send commands.")
+            return False
+        try:
+            for cmd in commands:
+                _desktop_proc.stdin.write(cmd.strip() + "\n")
+            _desktop_proc.stdin.flush()
+            _desktop_log(f"[Desktop] Sent commands: {', '.join(c.strip() for c in commands)}")
+            return True
+        except Exception as e:
+            _desktop_log(f"[Desktop] Error sending command list: {e}")
             return False
 
 def stream_live_data() -> Generator[str, None, None]:

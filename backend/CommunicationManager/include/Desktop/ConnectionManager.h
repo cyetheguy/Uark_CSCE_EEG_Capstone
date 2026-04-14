@@ -26,6 +26,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <atomic>
 
 //-------------------------------------------------------------------------------------------------------------
 
@@ -195,6 +196,7 @@ class ConnectionManager{
 
         //Connecting to device
         void connectToDiscoveredDevice(int deviceIndex);
+        void connectToDeviceWithAddress(uint64_t deviceAddress);
         void connectToDeviceWithUUID();
         void connectToDeviceWithName();
 
@@ -213,12 +215,14 @@ class ConnectionManager{
         //Private Global variables
 
         //Connection
-        void connectPeripheral(uint64_t windowsDeviceAddress);
+        void connectPeripheral(uint64_t windowsDeviceAddress, int retriesRemaining = 8);
 
         //Characteristic and service discovery
-        void discoverServices(winrt::Windows::Devices::Bluetooth::BluetoothLEDevice device);
+        void discoverServices(winrt::Windows::Devices::Bluetooth::BluetoothLEDevice device, int retriesRemaining = 6);
         void discoverCharacteristicsForService(winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattDeviceService service);
         void readValueForCharacteristic(winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic characteristic);
+        void writeControlPointEnable(uint64_t deviceAddress);
+        void processTransparentChunk(uint64_t deviceAddress, const std::string& chunk);
 
         //Checks for error handling when discovering, trying/setup for connection, or active connection
         //For connecting and discovery
@@ -274,6 +278,11 @@ class ConnectionManager{
         std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> subscribedWriteCharacteristics;
         std::unordered_map<uint64_t, std::unordered_set<winrt::guid>> subscribedNotifyCharacteristics;
         bool connecting = false;
+        std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> transparentTxNotifyCharacteristics;
+        std::unordered_map<uint64_t, std::shared_ptr<winrt::Windows::Devices::Bluetooth::GenericAttributeProfile::GattCharacteristic>> transparentControlCharacteristics;
+        std::unordered_map<uint64_t, std::string> transparentReassemblyBuffer;
+        std::atomic<uint64_t> notifyEventCount{0};
+        std::atomic<bool> txNotifySubscribed{false};
 
         // Queue and worker thread for streaming characteristic values as messages
         SampleQueue sampleQueue;

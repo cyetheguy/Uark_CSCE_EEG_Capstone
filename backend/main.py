@@ -2,6 +2,7 @@ from __future__ import annotations
 import sys
 import json
 import time
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Union
 import logging
@@ -23,6 +24,18 @@ SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
 def _is_live_mode() -> bool:
     """Helper: true when request asks for live (BLE) data; False for review."""
     return request.args.get('mode', 'live').lower() == 'live'
+
+
+_MAC_REGEX = re.compile(r"^(?:[0-9A-Fa-f]{2}([-:]))(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}$")
+
+
+def _normalize_mac_address(raw: str) -> str:
+    """Normalize a MAC string to AA:BB:CC:DD:EE:FF and validate format."""
+    s = raw.strip()
+    if not _MAC_REGEX.fullmatch(s):
+        raise ValueError("MAC address must be in format AA:BB:CC:DD:EE:FF (or with '-')")
+    parts = re.split(r"[:-]", s)
+    return ":".join(p.upper() for p in parts)
 
 @app.route('/api/login', methods=['POST'])
 def login() -> Tuple[Response, int]:
@@ -204,6 +217,30 @@ def device_scan() -> Tuple[Response, int]:
         time.sleep(0.5)
         if ble_comms.send_desktop_command(cmd):
             return jsonify({"success": True, "message": "scan sent to Desktop client"}), 200
+    return jsonify({"success": False, "error": "Desktop client not running"}), 503
+
+
+@app.route('/api/device/connect', methods=['POST'])
+def device_connect() -> Tuple[Response, int]:
+    """Connect to a specific BLE device by MAC address using Desktop.cpp's connectaddress flow."""
+    data: Dict[str, Any] = request.get_json(silent=True) or {}
+    raw_mac: str = str(data.get("mac_address") or data.get("address") or "").strip()
+    if not raw_mac:
+        return jsonify({"success": False, "error": "mac_address is required"}), 400
+    try:
+        mac_address: str = _normalize_mac_address(raw_mac)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+    commands: List[str] = ["connectaddress", mac_address]
+
+    if ble_comms.send_desktop_commands(commands):
+        return jsonify({"success": True, "message": "connectaddress sent to Desktop client", "mac_address": mac_address}), 200
+
+    if ble_comms.launch_desktop_client():
+        time.sleep(0.5)
+        if ble_comms.send_desktop_commands(commands):
+            return jsonify({"success": True, "message": "connectaddress sent to Desktop client", "mac_address": mac_address}), 200
     return jsonify({"success": False, "error": "Desktop client not running"}), 503
 
 @app.route('/api/edf/info', methods=['GET'])
