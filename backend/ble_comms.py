@@ -12,7 +12,10 @@ from debug import getDebug
 BLUETOOTH_HEX_MAX_LINES: int = 500
 BLUETOOTH_SAMPLES_MAX: int = 100_000
 
-# Shared state for BLE data
+# Shared state for BLE data.
+# Design note: we keep two parallel views:
+# - `bluetooth_hex_lines`: last N raw "Value (02x hex): ..." lines for debugging/diagnostics
+# - `bluetooth_samples`: numeric sample values parsed from those lines for plotting + saving
 bluetooth_hex_lines: deque[Dict[str, str]] = deque(maxlen=BLUETOOTH_HEX_MAX_LINES)
 bluetooth_samples: List[float] = []
 bluetooth_samples_lock: threading.Lock = threading.Lock()
@@ -21,6 +24,10 @@ _HEX_LINE_PREFIX: str = "Value (02x hex): "
 BACKEND_DIR: Path = Path(__file__).parent
 DESKTOP_EXE: Path = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "main.exe"
 
+# Desktop client lifecycle:
+# - Backend launches `main.exe` and keeps its stdin/stdout piped.
+# - Flask endpoints send commands (scan/connect) by writing to stdin.
+# - A background thread continuously drains stdout and extracts samples.
 _desktop_proc: Optional[subprocess.Popen] = None
 _desktop_lock: threading.Lock = threading.Lock()
 
@@ -32,7 +39,21 @@ def _desktop_log(msg: str, *, end: str = "\n", flush: bool = True) -> None:
 
 
 def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
-    """If line is 'Value (02x hex): XXYY...', return (raw_hex_str, parsed_float_or_none)."""
+    """
+    Parse the Desktop client's log line format.
+    
+    Expected prefix:
+      "Value (02x hex): <hex bytes...>"
+    
+    Returns:
+    - raw_hex_str: the extracted hex substring (for diagnostics)
+    - parsed_float_or_none: best-effort conversion into a numeric EEG sample
+    
+    Parsing strategy:
+    - Try interpreting the bytes as UTF-8 text containing a number (some firmwares send ASCII).
+    - Otherwise, treat pairs of bytes as little-endian int16 samples and take the first.
+      (This matches many BLE payload designs where each notification is one int16.)
+    """
     line = line.strip()
     if not line.startswith(_HEX_LINE_PREFIX):
         return None, None
@@ -65,7 +86,19 @@ def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
     return raw_hex, None
 
 def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
-    """Read stdout from main.exe; print it and capture hex lines / parsed samples."""
+    """
+    Continuously read stdout from `main.exe`.
+    
+    Why this exists:
+    - `Popen(..., stdout=PIPE)` requires the parent process to drain stdout,
+      otherwise the child can block once its pipe buffer fills.
+    - We piggyback on those logs to extract and accumulate EEG samples.
+    
+    Threading:
+    - This function is run in a daemon thread created by `launch_desktop_client`.
+    - It appends to the shared buffers. `bluetooth_samples` uses a lock to keep
+      concurrent reads (from Flask routes) consistent.
+    """
     global bluetooth_hex_lines, bluetooth_samples
     try:
         if proc.stdout is None:
@@ -121,6 +154,7 @@ def send_desktop_command(cmd: str) -> bool:
             _desktop_log("[Desktop] Process not running — cannot send command.")
             return False
         try:
+            # Desktop.cpp expects exactly one token per line (no JSON protocol here).
             _desktop_proc.stdin.write(cmd.strip() + "\n")
             _desktop_proc.stdin.flush()
             _desktop_log(f"[Desktop] Sent command: {cmd.strip()}")
@@ -148,7 +182,16 @@ def send_desktop_commands(commands: Sequence[str]) -> bool:
             return False
 
 def stream_live_data() -> Generator[str, None, None]:
-    """Generator yielding live BLE samples for Server-Sent Events (SSE)."""
+    """
+    Generator yielding live samples as Server-Sent Events (SSE).
+    
+    SSE format reminder:
+      yield "data: <json-string>\\n\\n"
+    
+    This function implements a simple "tail -f" of `bluetooth_samples`:
+    - `last_len` tracks how many samples the client has already seen.
+    - We send only the new appended samples on each loop.
+    """
     sample_count: int = 0
     start_time: float = time.time()
     last_len: int = 0
@@ -170,7 +213,13 @@ def stream_live_data() -> Generator[str, None, None]:
             break
 
 def get_new_samples(last_len: int) -> Tuple[List[float], int]:
-    """Helper callback to fetch new BLE samples without exposing the thread lock."""
+    """
+    Callback used by the plotting stream to retrieve appended samples.
+    
+    We return:
+    - new_part: samples from [last_len:n)
+    - n: updated last_len value for the caller to keep
+    """
     with bluetooth_samples_lock:
         n: int = len(bluetooth_samples)
         new_part: List[float] = bluetooth_samples[last_len:n] if n > last_len else []

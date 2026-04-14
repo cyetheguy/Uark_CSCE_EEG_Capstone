@@ -14,6 +14,15 @@ BACKEND_ROOT: Path = Path(__file__).resolve().parent
 USER_DIR: Path = BACKEND_ROOT / "user"
 SESSIONS_DIR: Path = BACKEND_ROOT / "sessions"
 
+# Security model (current design):
+# - Each user has a `.USR` file containing an AES-GCM encrypted JSON blob.
+# - The encryption key is derived from the user's password + per-file salt using PBKDF2.
+# - On successful login, we store the derived key in-process as `USR_KEY`.
+# - Session recordings are stored as encrypted `.eeg` files using AES-GCM under `USR_KEY`.
+#
+# Important implication:
+# - `.eeg` encryption is bound to the current process memory (`USR_KEY`); if the backend
+#   restarts, the user must log in again before sessions can be saved/loaded.
 USR_KEY: Optional[bytes] = None
 
 
@@ -26,7 +35,12 @@ def _list_usr_files() -> List[str]:
 all_usr: List[str] = _list_usr_files()
 
 def derive_key(password: str, salt: bytes) -> bytes:
-    """Returns SHA-256 key from password and salt"""
+    """
+    Derive a 256-bit key from a password + salt using PBKDF2-HMAC-SHA256.
+    
+    The high iteration count is to slow down offline guessing of passwords if a `.USR`
+    file is copied from disk.
+    """
     key: bytes = PBKDF2(password, salt, dkLen=32, count=200000, hmac_hash_module=SHA256)
     return key
 
@@ -42,6 +56,10 @@ def authenticate(input_username: str, input_password: str) -> bool:
         printDebug("[!] No .USR files found.")
         return False
 
+    # We don't store usernames in plaintext on disk. Instead we:
+    # - try deriving a candidate key from the provided password and each user's salt
+    # - attempt AES-GCM decryption/verification
+    # - if decryption succeeds and the decrypted username matches, login succeeds
     for file_path in all_usr:
         try:
             with open(file_path, "rb") as f:
@@ -103,7 +121,8 @@ def create_usr_file(username: str, password: str) -> bool:
     nonce: bytes = cipher.nonce
     ciphertext, tag = cipher.encrypt_and_digest(data)
     
-    # Write: Salt + Nonce + Tag + Ciphertext
+    # `.USR` file format:
+    #   salt(16) + nonce(16) + tag(16) + ciphertext(variable)
     with open(candidate, "wb") as f:
         f.write(salt + nonce + tag + ciphertext)
         
@@ -133,6 +152,8 @@ def encrypt_session(session: Dict[str, Any]) -> bool:
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     out_path: Path = SESSIONS_DIR / f"{date_info}.eeg"
     with open(out_path, "wb") as f:
+        # `.eeg` file format:
+        #   nonce(16) + tag(16) + ciphertext(variable)
         f.write(nonce + tag + ciphertext)
     return True
 
@@ -147,6 +168,8 @@ def list_user_sessions() -> List[str]:
     if not SESSIONS_DIR.exists():
         return valid_lists
 
+    # We only return sessions that decrypt under the active key, which effectively
+    # filters out other users' sessions without storing explicit ownership metadata.
     for filepath in sorted(SESSIONS_DIR.glob("*.eeg")):
         with open(filepath, "rb") as f:
             nonce: bytes = f.read(16)

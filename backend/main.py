@@ -18,11 +18,20 @@ import data_processor
 app: Flask = Flask(__name__)
 CORS(app)
 
+# Backend folder layout:
+# - backend/sessions: demo EDF files + encrypted .eeg sessions
+# - backend/user: encrypted .USR credential files (used to derive the per-user key)
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
 
 def _is_live_mode() -> bool:
-    """Helper: true when request asks for live (BLE) data; False for review."""
+    """
+    Decide whether endpoints should serve:
+    - **live**: realtime samples coming from the DreamR device over BLE (via Desktop client)
+    - **review**: replay samples from files (EDF demo files / encrypted sessions)
+    
+    The frontend toggles this via `?mode=live` or `?mode=review`.
+    """
     return request.args.get('mode', 'live').lower() == 'live'
 
 
@@ -43,6 +52,8 @@ def login() -> Tuple[Response, int]:
     username: str = data.get('username', '')
     password: str = data.get('password', '')
     
+    # IMPORTANT: `crypto_ops.authenticate` derives and stores a global USR_KEY.
+    # That key is later used by `/api/sessions/save` to encrypt `.eeg` session files.
     if crypto_ops.authenticate(username, password):
         return jsonify({
             "success": 1, 
@@ -73,6 +84,8 @@ def create_account() -> Tuple[Response, int]:
 def stream_edf_data() -> Response:
     try:
         if _is_live_mode():
+            # Server-Sent Events (SSE): the generator yields `data: <json>\n\n`.
+            # The frontend uses EventSource to receive a continuous stream.
             generator = ble_comms.stream_live_data()
         else:
             edf_files: List[Path] = list(SESSIONS_DIR.glob('*.edf'))
@@ -88,6 +101,8 @@ def stream_edf_data() -> Response:
 def get_edf_plot() -> Union[Response, Tuple[Response, int]]:
     try:
         if _is_live_mode():
+            # Snapshot the most recent window of samples from the shared BLE buffer.
+            # Lock is needed because another thread is appending to the list.
             with ble_comms.bluetooth_samples_lock:
                 samples: List[float] = list(ble_comms.bluetooth_samples)[-(int(data_processor.WINDOW_SECONDS * 100)):]
             if len(samples) < 10: 
@@ -110,6 +125,9 @@ def stream_edf_plot() -> Response:
     live: bool = _is_live_mode()
     username: str = request.args.get('username', 'demo')
     
+    # This endpoint sends periodic plot images as base64-encoded PNGs over SSE.
+    # Rationale: it keeps the frontend simple (no FFT/plotting in the browser) at the cost
+    # of higher bandwidth than streaming raw samples.
     generator = data_processor.generate_plot_stream(live, username, get_ble_samples_cb=ble_comms.get_new_samples)
     return Response(generator, mimetype='text/event-stream', headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
@@ -140,6 +158,8 @@ def export_live_csv() -> Tuple[Response, int]:
 
         name: str
         path: str
+        # Exports are intentionally unencrypted CSVs for easy analysis in Excel/Python.
+        # Encrypted session saving is handled separately by `/api/sessions/save`.
         name, path = data_processor.export_csv(
             samples, 
             payload.get("username", ""), 
@@ -165,6 +185,9 @@ def save_encrypted_session() -> Tuple[Response, int]:
         if not samples:
             return jsonify({"success": False, "error": "No BLE samples available"}), 400
 
+        # `.eeg` is an app-specific encrypted blob:
+        #   nonce(16) + tag(16) + ciphertext(JSON session payload)
+        # The encryption key is derived during `/api/login`.
         filename: str = data_processor.save_eeg(samples, username, sampling_rate)
         return jsonify({"success": True, "filename": filename, "samples": len(samples)}), 200
     except RuntimeError as e:
@@ -194,6 +217,8 @@ def select_folder() -> Tuple[Response, int]:
 @app.route('/api/sessions/list', methods=['GET'])
 def list_sessions() -> Tuple[Response, int]:
     try:
+        # Returns a normalized list for the frontend session browser.
+        # It can include both decrypted `.eeg` sessions and demo `.edf` files.
         return jsonify({"success": True, "sessions": data_processor.get_all_sessions_info()}), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -201,6 +226,7 @@ def list_sessions() -> Tuple[Response, int]:
 @app.route('/api/sessions/<session_id>/data', methods=['GET'])
 def get_session_data(session_id: str) -> Tuple[Response, int]:
     try:
+        # This is the "review mode" payload: timestamps + downsampled channelData + sleep stages.
         return jsonify(data_processor.get_session_data_payload(session_id)), 200
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -232,6 +258,9 @@ def device_connect() -> Tuple[Response, int]:
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
 
+    # Desktop client protocol is line-oriented commands via stdin:
+    # - connectaddress
+    # - <MAC>
     commands: List[str] = ["connectaddress", mac_address]
 
     if ble_comms.send_desktop_commands(commands):
@@ -274,5 +303,7 @@ if __name__ == "__main__":
         _wk.disabled = True
         _wk.setLevel(logging.ERROR)
 
+    # Start the Desktop BLE bridge client up front so the UI can immediately "scan/connect"
+    # without manually launching a separate executable.
     ble_comms.launch_desktop_client()
     app.run(debug=bool(debug.getDebug()), port=5000, use_reloader=False)

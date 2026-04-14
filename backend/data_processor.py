@@ -21,6 +21,9 @@ from sleep_stages_amplitude import compute_sleep_stages_amplitude
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
 
+# Plotting/streaming parameters are tuned for interactive UX:
+# - WINDOW_SECONDS controls how much signal the plot shows at a time.
+# - PLOT_UPDATE_INTERVAL controls how often we regenerate the PNG in plot-stream mode.
 WINDOW_SECONDS: int = 60
 PLOT_UPDATE_INTERVAL: float = 0.1
 
@@ -47,6 +50,15 @@ def get_edf_file_for_user(username: str) -> Path:
     raise FileNotFoundError("No EDF files in sessions directory")
 
 def get_edf_start_and_duration(edf_path: Path) -> Tuple[str, str, float]:
+    """
+    Read a few EDF fixed header fields without a full EDF parser.
+    
+    EDF fixed header layout (selected offsets):
+    - startdate: bytes 168:176 (dd.mm.yy)
+    - starttime: bytes 176:184 (hh.mm.ss)
+    - num_records: bytes 236:244 (ASCII int; -1 means unknown/continuous)
+    - record_duration: bytes 244:252 (ASCII float, seconds)
+    """
     with open(edf_path, 'rb') as fh:
         fixed: bytes = fh.read(256)
     startdate: str = (fixed[168:176].decode("ascii", "ignore") or "01.01.00").strip()
@@ -57,6 +69,15 @@ def get_edf_start_and_duration(edf_path: Path) -> Tuple[str, str, float]:
     return startdate, starttime, duration_sec
 
 def read_edf_header(fh: BinaryIO) -> Dict[str, Any]:
+    """
+    Minimal EDF header reader.
+    
+    EDF stores most header fields as fixed-width ASCII strings.
+    This reads enough metadata to:
+    - locate a channel's samples in each record
+    - compute sample frequency (samples_per_record / record_duration)
+    - convert int16 digital values into physical units using linear scaling
+    """
     fixed: bytes = fh.read(256)
     num_records: int = int(fixed[236:244].decode("ascii", "ignore").strip() or "-1")
     record_duration: float = float(fixed[244:252].decode("ascii", "ignore").strip() or "1")
@@ -86,6 +107,17 @@ def read_edf_header(fh: BinaryIO) -> Dict[str, Any]:
     }
 
 def read_edf_samples(edf_path: str, channel_idx: int = 0, max_samples: int = 3000) -> Tuple[np.ndarray, float, str]:
+    """
+    Read up to `max_samples` samples from a single EDF channel.
+    
+    EDF stores data as "records". Each record contains concatenated samples for each signal:
+      [ch0 samples][ch1 samples]...[chN samples]
+    
+    To extract one channel efficiently we:
+    - compute the byte ranges before/after the channel inside each record
+    - slice them away and decode the remaining int16 values
+    - apply (scale, offset) to map digital int16 -> physical units
+    """
     with open(edf_path, 'rb') as fh:
         header: Dict[str, Any] = read_edf_header(fh)
         
@@ -124,6 +156,11 @@ def read_edf_samples(edf_path: str, channel_idx: int = 0, max_samples: int = 300
         return np.array(samples), sfreq, header['labels'][channel_idx]
 
 def iter_edf_samples_continuously(edf_path: str, channel_idx: int = 0) -> Generator[float, None, None]:
+    """
+    Generator that yields channel samples sequentially until EOF.
+    
+    Used by streaming endpoints to simulate realtime replay of EDF recordings.
+    """
     with open(edf_path, 'rb') as fh:
         header: Dict[str, Any] = read_edf_header(fh)
         sig_samples_per_record: int = header['samples_per_record'][channel_idx]
@@ -155,6 +192,13 @@ def iter_edf_samples_continuously(edf_path: str, channel_idx: int = 0) -> Genera
 # ─── PLOTTING AND STREAMING ──────────────────────────────────────────────────────
 
 def generate_eeg_plot(samples: np.ndarray | List[float], sfreq: float, channel_label: str, time_start_sec: float = 0.0) -> io.BytesIO:
+    """
+    Render a 2-panel PNG:
+    - top: time-domain window of the signal
+    - bottom: simple FFT-based power spectrum (band-shaded)
+    
+    Returned as an in-memory PNG so Flask can `send_file` without writing to disk.
+    """
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
     fig.suptitle(f'EEG Analysis - {channel_label}', fontsize=14, fontweight='bold')
     
@@ -171,6 +215,7 @@ def generate_eeg_plot(samples: np.ndarray | List[float], sfreq: float, channel_l
     ax1.tick_params(axis='x', which='major', labelsize=9)
     
     if len(samples) > 100:
+        # Windowing reduces FFT spectral leakage; spectrum is used only for visualization.
         window: np.ndarray = np.hanning(len(samples))
         windowed: np.ndarray = np.array(samples) * window
         freqs: np.ndarray = np.fft.rfftfreq(len(windowed), d=1.0/sfreq)
@@ -202,6 +247,7 @@ def generate_eeg_plot(samples: np.ndarray | List[float], sfreq: float, channel_l
     return buf
 
 def stream_edf_data(edf_file: Path) -> Generator[str, None, None]:
+    """SSE generator replaying EDF samples at ~100Hz-ish (sleep(0.01))."""
     sample_count: int = 0
     start_time: float = time.time()
     for value in iter_edf_samples_continuously(str(edf_file), channel_idx=0):
@@ -213,6 +259,18 @@ def stream_edf_data(edf_file: Path) -> Generator[str, None, None]:
             break
 
 def generate_plot_stream(live: bool, username: str, get_ble_samples_cb: Optional[Callable[[int], Tuple[List[float], int]]] = None) -> Generator[str, None, None]:
+    """
+    SSE generator that periodically sends a base64-encoded PNG.
+    
+    Two modes:
+    - live=True: plot the newest BLE samples pulled via `get_ble_samples_cb`
+    - live=False: replay samples from the chosen EDF file and plot them
+    
+    Implementation notes:
+    - `buffer` is a sliding window to keep plots responsive.
+    - `total_samples_read` is used to compute the x-axis time offset so the plot
+      aligns with the position in the full session.
+    """
     if live:
         channel_label: str = "BLE"
         sfreq: float = 100.0
@@ -285,6 +343,8 @@ def save_eeg(samples: List[float], username: str, sampling_rate: float = 100.0) 
         "samples": samples
     }
     
+    # `crypto_ops.encrypt_session` requires that a user successfully authenticated first,
+    # because the encryption key is derived and stored globally as `crypto_ops.USR_KEY`.
     success: bool = crypto_ops.encrypt_session(session_data)
     if not success:
         raise RuntimeError("Encryption failed during save_eeg. User may not be logged in.")
@@ -296,6 +356,7 @@ def load_eeg(filename: str) -> Dict[str, Any]:
     return crypto_ops.decrypt_session(filename)
 
 def export_csv(samples: List[float], username: str, filename: str, sampling_rate: float, output_dir: str = "") -> Tuple[str, str]:
+    """Write raw samples to CSV for external analysis (not encrypted)."""
     target_dir: Path
     if output_dir and str(output_dir).strip():
         target_dir = Path(str(output_dir).strip()).expanduser()
@@ -427,7 +488,9 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
             
         if raw_samples:
             raw_for_stages = np.asarray(raw_samples, dtype=np.float64)
-        # Downsample to ~1Hz for review mode performance
+        # Downsample to ~1Hz for review mode performance.
+        # The UI only needs a coarse trend line for long sessions; the full-rate samples
+        # remain in the encrypted file and can be exported separately if needed.
         step: int = max(1, int(round(sfreq)))
         samples = [float(raw_samples[i]) for i in range(0, len(raw_samples), step)]
 
@@ -460,6 +523,8 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
     duration_ms: int = len(samples) * 1000
     end_ts: int = start_ms + duration_ms
     if raw_for_stages is not None and raw_for_stages.size >= 2:
+        # Sleep stages are computed from the *raw* (non-downsampled) signal to preserve
+        # the amplitude dynamics the stage classifier expects.
         stages_out = compute_sleep_stages_amplitude(raw_for_stages, sfreq, start_ms, session_end_ms=end_ts)
     else:
         stages_out = []
