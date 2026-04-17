@@ -9,8 +9,9 @@ from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Random import get_random_bytes
 from debug import printDebug
+from runtime_paths import get_backend_data_root
 
-BACKEND_ROOT: Path = Path(__file__).resolve().parent
+BACKEND_ROOT: Path = get_backend_data_root()
 USER_DIR: Path = BACKEND_ROOT / "user"
 SESSIONS_DIR: Path = BACKEND_ROOT / "sessions"
 

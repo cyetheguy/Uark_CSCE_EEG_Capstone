@@ -14,6 +14,7 @@ import debug
 import crypto_ops
 import ble_comms
 import data_processor
+from runtime_paths import get_backend_data_root, ensure_runtime_data_dirs
 
 app: Flask = Flask(__name__)
 CORS(app)
@@ -21,8 +22,8 @@ CORS(app)
 # Backend folder layout:
 # - backend/sessions: demo EDF files + encrypted .eeg sessions
 # - backend/user: encrypted .USR credential files (used to derive the per-user key)
-BACKEND_DIR: Path = Path(__file__).parent
-SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
+BACKEND_DATA_DIR: Path = get_backend_data_root()
+SESSIONS_DIR: Path = BACKEND_DATA_DIR / "sessions"
 
 def _is_live_mode() -> bool:
     """
@@ -312,6 +313,7 @@ def get_edf_info() -> Tuple[Response, int]:
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
+    ensure_runtime_data_dirs()
     for arg in sys.argv[1:]:
         if arg == "--debug":
             debug.setDebug(debug.DEBUG)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Tuple, List, Optional, Dict, Any, Generator, Sequence
 
 from debug import getDebug
+from runtime_paths import get_backend_root
 
 BLUETOOTH_HEX_MAX_LINES: int = 500
 BLUETOOTH_SAMPLES_MAX: int = 100_000
@@ -24,7 +25,7 @@ _HEX_LINE_PREFIX: str = "Value (02x hex): "
 _HEX_ONLY_LINE_RE: re.Pattern[str] = re.compile(r"^\s*([0-9a-fA-F]+)\s*$")
 # Must match firmware_test/main.c BRAINWAVE_FRAME_MAGIC — only 0xEE + int8 is plotted as EEG.
 BRAINWAVE_FRAME_MAGIC: int = 0xEE
-BACKEND_DIR: Path = Path(__file__).parent
+BACKEND_DIR: Path = get_backend_root()
 DESKTOP_EXE: Path = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "main.exe"
 
 # Desktop client lifecycle:

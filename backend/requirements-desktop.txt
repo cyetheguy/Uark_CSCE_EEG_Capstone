@@ -1,0 +1,5 @@
+pycryptodome
+flask
+flask-cors
+numpy
+matplotlib

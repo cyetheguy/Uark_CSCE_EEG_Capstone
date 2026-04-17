@@ -46,7 +46,8 @@ static void log_tx_stats(void) {
              notify_sent_count,
              notify_drop_count,
              queue_overflow_count,
-             bytes_sent_total);
+             bytes_sent_total
+            );
 }
 
 static void process_rx_control(const uint8_t *data, int len) {

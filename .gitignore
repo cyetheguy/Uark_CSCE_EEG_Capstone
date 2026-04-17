@@ -212,3 +212,12 @@ __marimo__/
 node_modules/
 *.usr
 *.eeg
+
+# Desktop installer/build artifacts
+frontend/release/
+frontend/release-oneclick/
+frontend/build/backend-dist/
+frontend/build/backend-work/
+frontend/build/backend-spec/
+frontend/*.exe.blockmap
+frontend/*.tsbuildinfo

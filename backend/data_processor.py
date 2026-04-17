@@ -17,10 +17,11 @@ import matplotlib.pyplot as plt
 import crypto_ops
 from debug import printDebug
 from sleep_stages_amplitude import compute_sleep_stages_amplitude
+from runtime_paths import get_backend_data_root
 
-BACKEND_DIR: Path = Path(__file__).parent
-SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
-EXPORT_DIR: Path = BACKEND_DIR / "export"
+BACKEND_DATA_DIR: Path = get_backend_data_root()
+SESSIONS_DIR: Path = BACKEND_DATA_DIR / "sessions"
+EXPORT_DIR: Path = BACKEND_DATA_DIR / "export"
 
 # Plotting/streaming parameters are tuned for interactive UX:
 # - WINDOW_SECONDS controls how much signal the plot shows at a time.
