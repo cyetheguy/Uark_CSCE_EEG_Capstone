@@ -171,6 +171,19 @@ def export_live_csv() -> Tuple[Response, int]:
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/live/reset', methods=['POST'])
+def reset_live_buffers() -> Tuple[Response, int]:
+    """
+    Clear in-memory BLE buffers used for live streaming/export so a new acquisition starts fresh.
+    """
+    try:
+        with ble_comms.bluetooth_samples_lock:
+            ble_comms.bluetooth_samples.clear()
+        ble_comms.bluetooth_hex_lines.clear()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/sessions/save', methods=['POST'])
 def save_encrypted_session() -> Tuple[Response, int]:
     """Persist live BLE samples as an encrypted .eeg file (requires successful /api/login for USR_KEY)."""
@@ -276,7 +289,20 @@ def device_connect() -> Tuple[Response, int]:
 def get_edf_info() -> Tuple[Response, int]:
     try:
         if _is_live_mode():
-            return jsonify({"success": True, "filename": "BLE (live from Bluetooth)", "num_signals": 1, "labels": ["BLE"], "sampling_rate": 100.0}), 200
+            # Must match firmware notify rate (samples/sec) for epoch-based staging on the frontend.
+            # firmware_test/main.c: TX_PERIOD_MS=4 → 250 SPS.
+            live_sf: float = float(request.args.get("sampling_rate", 250.0))
+            if live_sf <= 0 or live_sf > 1_000_000:
+                live_sf = 250.0
+            return jsonify(
+                {
+                    "success": True,
+                    "filename": "BLE (live from Bluetooth)",
+                    "num_signals": 1,
+                    "labels": ["BLE"],
+                    "sampling_rate": live_sf,
+                }
+            ), 200
         username: str = request.args.get('username', 'demo')
         edf_file: Path = data_processor.get_edf_file_for_user(username)
         with open(str(edf_file), 'rb') as fh: 

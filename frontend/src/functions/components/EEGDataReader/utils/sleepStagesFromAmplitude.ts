@@ -22,7 +22,7 @@ export const DEEP_RATIO_MAX_SLEEP_P = 50;
 export const REM_RATIO_SLEEP_P = 70;
 export const REM_MAX_RMS_SLEEP_P = 72;
 
-const INT_TO_TYPE: Array<SleepStage['type']> = ['awake', 'light', 'deep', 'rem'];
+export const INT_TO_TYPE: Array<SleepStage['type']> = ['awake', 'light', 'deep', 'rem'];
 
 function rankNorm(a: number[]): number[] {
   const n = a.length;
@@ -87,7 +87,7 @@ function hysteresisInt(labels: number[], nConfirm: number): number[] {
   return out;
 }
 
-function mergeSegments(
+export function mergeSegments(
   labels: number[],
   startMs: number,
   epochMs: number,
@@ -115,24 +115,18 @@ function mergeSegments(
 }
 
 /**
- * @param samples raw amplitude samples at sfreq Hz (same channel as review)
- * @param sessionStart recording start (used for segment timestamps; live stream uses synthetic start)
+ * Compute the per-epoch label array (0=awake, 1=light, 2=deep, 3=rem) from raw samples.
+ * Returns the smoothed + hysteresis-filtered label array of length nEpochs.
+ * Exposed so callers that want to commit labels incrementally can pull a single
+ * label without re-running `mergeSegments` / Date allocation.
  */
-export function computeSleepStagesFromAmplitude(
+export function computeLabelsFromAmplitude(
   samples: number[],
   sfreq: number,
-  sessionStart: Date,
-  sessionEndMsOverride?: number,
   options?: { useTargetWake?: boolean | null; targetWakeFraction?: number }
-): SleepStage[] {
+): number[] {
   const x = samples;
   if (x.length < 2 || sfreq <= 0) return [];
-
-  const startMs = sessionStart.getTime();
-  const sessionEndMs =
-    sessionEndMsOverride !== undefined
-      ? sessionEndMsOverride
-      : startMs + Math.round((1000 * x.length) / sfreq);
 
   const epochSamples = Math.max(1, Math.round(EPOCH_SEC * sfreq));
   const nEpochs = Math.floor(x.length / epochSamples);
@@ -215,7 +209,43 @@ export function computeSleepStagesFromAmplitude(
   }
 
   smooth = hysteresisInt(smooth, HYSTERESIS_EPOCHS);
+  return smooth;
+}
 
+/**
+ * Convert a per-epoch label array into SleepStage segments anchored at sessionStart.
+ * Thin wrapper around `mergeSegments` for callers working directly with committed labels.
+ */
+export function labelsToSegments(
+  labels: number[],
+  sessionStart: Date,
+  sessionEndMs?: number
+): SleepStage[] {
+  if (labels.length === 0) return [];
+  const startMs = sessionStart.getTime();
   const epochMs = Math.round(EPOCH_SEC * 1000);
-  return mergeSegments(smooth, startMs, epochMs, sessionEndMs);
+  const endMs = sessionEndMs !== undefined ? sessionEndMs : startMs + labels.length * epochMs;
+  return mergeSegments(labels, startMs, epochMs, endMs);
+}
+
+/**
+ * @param samples raw amplitude samples at sfreq Hz (same channel as review)
+ * @param sessionStart recording start (used for segment timestamps; live stream uses synthetic start)
+ */
+export function computeSleepStagesFromAmplitude(
+  samples: number[],
+  sfreq: number,
+  sessionStart: Date,
+  sessionEndMsOverride?: number,
+  options?: { useTargetWake?: boolean | null; targetWakeFraction?: number }
+): SleepStage[] {
+  const labels = computeLabelsFromAmplitude(samples, sfreq, options);
+  if (labels.length === 0) return [];
+  const startMs = sessionStart.getTime();
+  const sessionEndMs =
+    sessionEndMsOverride !== undefined
+      ? sessionEndMsOverride
+      : startMs + Math.round((1000 * samples.length) / sfreq);
+  const epochMs = Math.round(EPOCH_SEC * 1000);
+  return mergeSegments(labels, startMs, epochMs, sessionEndMs);
 }

@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import EEGChart from './EEGChart';
 import { SleepSessionData, AppSettings, ChartDataPoint, EDFStreamState } from '../types';
 import { 
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -35,6 +34,7 @@ const STAGE_COLORS: Record<string, string> = {
   light: '#ed8936', // Orange
   rem: '#3182ce',   // Blue
   deep: '#38a169',  // Green
+  calibrating: '#a0aec0', // Gray — shown during the first ~5 min before any epoch is committed
 };
 
 const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
@@ -58,8 +58,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [manualScrollIndex, setManualScrollIndex] = useState<number>(0);
 
-  // 60-second (1 minute) time window
-  const LIVE_WINDOW_MS = 60 * 1000;
+  const LIVE_WINDOW_SAMPLES = 60;
   const currentDataLength = selectedSession?.channelData.length || 0;
 
   // Keep manualScrollIndex up to date with the live edge when NOT paused or hovering
@@ -71,22 +70,13 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
 
   const { startIndex, endIndex, windowSize } = useMemo(() => {
     if (currentDataLength === 0) return { startIndex: 0, endIndex: 0, windowSize: 0 };
-    const timestamps = selectedSession!.timestamps;
     
     // Use manual index if paused by slider OR paused by hovering
     const endIdx = (isPaused || isHovering)
       ? Math.min(manualScrollIndex, currentDataLength - 1)
       : currentDataLength - 1;
-      
-    const endTime = timestamps[endIdx].getTime();
-    const startTime = endTime - LIVE_WINDOW_MS;
-    let startIdx = 0;
-    for (let i = 0; i <= endIdx; i++) {
-      if (timestamps[i].getTime() >= startTime) {
-        startIdx = i;
-        break;
-      }
-    }
+
+    const startIdx = Math.max(0, endIdx - LIVE_WINDOW_SAMPLES + 1);
     return { startIndex: startIdx, endIndex: endIdx, windowSize: endIdx - startIdx + 1 };
   }, [selectedSession, isPaused, isHovering, manualScrollIndex, currentDataLength]);
 
@@ -129,6 +119,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     }
   };
 
+  const handleGraphWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (currentDataLength <= 0) return;
+    e.preventDefault();
+    const step = e.deltaY > 0 ? 3 : -3;
+    const next = Math.max(0, Math.min(currentDataLength - 1, endIndex + step));
+    setManualScrollIndex(next);
+    setIsPaused(next < currentDataLength - 1);
+  };
+
   // Helper for Quality Text
   const getQualityText = (stage: string) => {
     if (stage === 'deep') return { text: 'Excellent', color: '#68d391' }; // Green
@@ -145,7 +144,13 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     );
   }
 
-  const currentStage = realTimeData.length > 0 ? realTimeData[realTimeData.length - 1].stage : 'unknown';
+  // Current stage reflects the last *committed* epoch from the append-only sleepStages array,
+  // not the per-sample lookup. This keeps it stable (matches the hypnogram exactly) and
+  // prevents flicker as new samples stream in.
+  const hasCommittedStages = (selectedSession.sleepStages?.length ?? 0) > 0;
+  const currentStage = hasCommittedStages
+    ? selectedSession.sleepStages[selectedSession.sleepStages.length - 1].type
+    : 'calibrating';
 
   return (
     <div className="visualization-panel">
@@ -223,9 +228,14 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
               }}
               onMouseEnter={() => setIsHovering(true)}
               onMouseLeave={() => { setHoverData(null); setIsHovering(false); }}
+              onWheel={handleGraphWheel}
             >
               {realTimeData.length === 0 ? (
                 <div className="graph-empty-state">Acquiring signal…</div>
+              ) : (!showRawData && !hasCommittedStages) ? (
+                <div className="graph-empty-state">
+                  Calibrating sleep stages… (waiting for first 30 s epoch)
+                </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   {showRawData ? (
@@ -338,7 +348,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             </div>
 
             <div className="graph-time-scrubber">
-              <span className="graph-time-scrubber-label">Time window: 1 min</span>
+              <span className="graph-time-scrubber-label">Window: {LIVE_WINDOW_SAMPLES} samples</span>
               <input
                 type="range"
                 min={0}
@@ -352,23 +362,173 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
           </div>
         ) : (
           <div className="sleep-graph">
-            <div className="graph-header" style={{ marginBottom: '0.5rem' }}>
-              <h3>Session recording</h3>
+            <div className="graph-header">
+              <h3>{showRawData ? "EEG amplitude (µV)" : "Hypnogram (sleep stage)"}</h3>
+              <div className="graph-scale" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+                <span className="stream-status stream-status-paused">Review</span>
+                {settings.showSleepStages && (
+                  <div className="graph-tooltip-box">
+                    {hoverData ? (
+                      <div className="graph-tooltip-content">
+                        <span className="graph-tooltip-time">{hoverData.time}</span>
+                        {showRawData ? (
+                          <span className="graph-tooltip-value">
+                            Amplitude: {hoverData.value.toFixed(2)} µV
+                          </span>
+                        ) : (
+                          (() => {
+                            const q = getQualityText(hoverData.stage);
+                            return (
+                              <span style={{ color: q.color, fontWeight: '600' }}>
+                                Stage: {hoverData.stage.charAt(0).toUpperCase() + hoverData.stage.slice(1)}
+                              </span>
+                            );
+                          })()
+                        )}
+                      </div>
+                    ) : (
+                      <span className="graph-tooltip-default">
+                        Current stage: <strong style={{ color: STAGE_COLORS[currentStage], textTransform: 'capitalize' }}>{currentStage}</strong>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-             <div className="graph-container">
-               <EEGChart
-                 data={getChartData()}
-                 channel={selectedChannel}
-                 height={480}
-                 timeRange={selectedSession.timestamps.length >= 2
-                   ? (selectedSession.timestamps[selectedSession.timestamps.length - 1].getTime() - selectedSession.timestamps[0].getTime()) / 1000
-                   : selectedSession.channelData.length / 100}
-                 color={settings.sleepStageColors.deep}
-                 showStats={true}
-                 sleepStages={selectedSession.sleepStages}
-                 showSleepStages={settings.showSleepStages}
-               />
-             </div>
+
+            <div
+              className="graph-container"
+              style={{
+                height: '400px', padding: '1rem', backgroundColor: 'var(--bg-primary)',
+                borderRadius: '8px 8px 0 0', overflow: 'hidden', position: 'relative'
+              }}
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => { setHoverData(null); setIsHovering(false); }}
+              onWheel={handleGraphWheel}
+            >
+              {realTimeData.length === 0 ? (
+                <div className="graph-empty-state">No signal samples in this session.</div>
+              ) : (!showRawData && !hasCommittedStages) ? (
+                <div className="graph-empty-state">
+                  No sleep stage data available for this session.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  {showRawData ? (
+                    <LineChart
+                      data={realTimeData}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                      onMouseMove={(e: any) => {
+                        if (e.activePayload) setHoverData({
+                          value: e.activePayload[0].payload.value,
+                          time: e.activePayload[0].payload.timeStr,
+                          stage: e.activePayload[0].payload.stage
+                        });
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} label={{ value: 'Time (HH:MM:SS)', position: 'insideBottom', offset: -4, fill: 'var(--text-secondary)', fontSize: 10 }} />
+                      <YAxis domain={['auto', 'auto']} stroke="var(--text-secondary)" width={42} tick={{ fontSize: 10 }} label={{ value: 'µV', angle: -90, position: 'insideLeft', fill: 'var(--text-secondary)', fontSize: 10 }} />
+                      <Tooltip
+                        cursor={{ stroke: 'var(--text-secondary)', strokeWidth: 1 }}
+                        contentStyle={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          color: 'var(--text-primary)'
+                        }}
+                        labelStyle={{ color: 'var(--text-secondary)' }}
+                        formatter={(value: any) => [`${Number(value).toFixed(2)} µV`, 'Amplitude']}
+                        labelFormatter={(label: any) => `Time: ${label}`}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="#63b3ed"
+                        strokeWidth={1.5}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  ) : (
+                    <ComposedChart
+                      data={realTimeData}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 16 }}
+                      onMouseMove={(e: any) => {
+                        if (e.activePayload && e.activePayload.length > 0) {
+                          setHoverData({
+                            value: e.activePayload[0].payload.value,
+                            time: e.activePayload[0].payload.timeStr,
+                            stage: e.activePayload[0].payload.stage
+                          });
+                        }
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                      <XAxis dataKey="timeStr" interval={100} tick={{ fill: 'var(--text-secondary)', fontSize: 10 }} label={{ value: 'Time (HH:MM:SS)', position: 'insideBottom', offset: -4, fill: 'var(--text-secondary)', fontSize: 10 }} />
+                      <YAxis
+                        type="number"
+                        domain={[0.5, 4.5]}
+                        ticks={[1, 2, 3, 4]}
+                        tickFormatter={(val) => {
+                          if (val === 4) return 'Wake';
+                          if (val === 3) return 'N1/N2';
+                          if (val === 2) return 'REM';
+                          if (val === 1) return 'N3';
+                          return '';
+                        }}
+                        stroke="var(--text-secondary)"
+                        width={52}
+                        tick={{ fontSize: 10, fontWeight: '600', fill: 'var(--text-secondary)' }}
+                        label={{ value: 'Stage', angle: -90, position: 'insideLeft', fill: 'var(--text-secondary)', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        cursor={{ stroke: 'var(--text-primary)', strokeWidth: 2 }}
+                        contentStyle={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '6px',
+                          color: 'var(--text-primary)'
+                        }}
+                        labelStyle={{ color: 'var(--text-secondary)' }}
+                        formatter={(_: any, __: any, item: any) => {
+                          const stage = item?.payload?.stage || 'unknown';
+                          return [stage.charAt(0).toUpperCase() + stage.slice(1), 'Stage'];
+                        }}
+                        labelFormatter={(label: any) => `Time: ${label}`}
+                      />
+                      <ReferenceArea y1={0.5} y2={1.5} fill={settings.sleepStageColors['deep']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={1.5} y2={2.5} fill={settings.sleepStageColors['rem']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={2.5} y2={3.5} fill={settings.sleepStageColors['light']} fillOpacity={0.25} isFront={false} />
+                      <ReferenceArea y1={3.5} y2={4.5} fill={settings.sleepStageColors['awake']} fillOpacity={0.25} isFront={false} />
+                      <Line
+                        type="stepAfter"
+                        dataKey="stageLevel"
+                        stroke="var(--text-primary)"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 4, fill: 'var(--text-primary)', stroke: 'var(--bg-primary)', strokeWidth: 1 }}
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    </ComposedChart>
+                  )}
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className="graph-time-scrubber">
+              <span className="graph-time-scrubber-label">Window: {LIVE_WINDOW_SAMPLES} samples</span>
+              <input
+                type="range"
+                min={0}
+                max={Math.max(0, currentDataLength - 1)}
+                value={endIndex}
+                onChange={handleSliderChange}
+                onMouseDown={() => setIsPaused(true)}
+                style={{ width: '100%', cursor: 'pointer' }}
+              />
+            </div>
           </div>
         )}
       </div>

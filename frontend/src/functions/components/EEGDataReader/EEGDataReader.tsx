@@ -81,17 +81,28 @@ const EEGDataReader: React.FC = () => {
   const updates = useUpdates(settings.settings);
 
   // Mode switch is the main "state machine" of the app:
-  // - live → start SSE acquisition
-  // - review → stop SSE and populate sessions list
+  // - live → resume existing stream or start new SSE acquisition
+  // - review → keep stream running in background, populate sessions list
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     if (mode === 'live') {
-      sleepData.loadEDFPlot(auth.username || 'demo', 'live');
-      updates.addUpdate('Starting live acquisition (BLE)...');
+      sleepData.setLiveUpdateEnabled(true);
+      // Re-select the existing live session if the stream is still running;
+      // only start a new stream when there is none.
+      const existingLive = sleepData.sleepSessions.find((s) => s.id.startsWith('edf_stream_'));
+      if (existingLive && sleepData.isStreamActive()) {
+        sleepData.setSelectedSession(existingLive);
+        updates.addUpdate('Resumed live acquisition');
+      } else {
+        sleepData.loadEDFPlot(auth.username || 'demo', 'live');
+        updates.addUpdate('Starting live acquisition (BLE)...');
+      }
     } else {
-      sleepData.cleanupStreams();
+      // Stop the live stream from overwriting the displayed session so the user
+      // can browse review sessions freely. The stream keeps accumulating in the
+      // background via sleepSessions.
+      sleepData.setLiveUpdateEnabled(false);
       sleepData.setSelectedSession(null);
-      // Always refresh: backend uses list_user_sessions + decrypt_session per file for metadata
       sleepData.fetchSessionList();
     }
   }, [auth.isAuthenticated, auth.username, mode]);
@@ -146,9 +157,18 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Settings reset to defaults');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      // Clear backend in-memory live buffers so the next login/session starts at 0 samples.
+      await fetch('/api/live/reset', { method: 'POST' });
+    } catch (error) {
+      // Non-fatal: still perform UI-side logout/reset below.
+      console.warn('Failed to reset live backend buffers on logout:', error);
+    }
     auth.handleLogout();
     sleepData.cleanupStreams();
+    sleepData.setSleepSessions([]);
+    sleepData.setSelectedSession(null);
     updates.addUpdate('Logged out successfully');
   };
 
@@ -190,6 +210,14 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Saving encrypted sleep session (.eeg) to server...');
 
     try {
+      const s = sleepData.selectedSession;
+      const observedSamplingRate = (() => {
+        if (!s?.timestamps?.length || s.timestamps.length < 2) return 100.0;
+        const spanSec = (s.timestamps[s.timestamps.length - 1].getTime() - s.timestamps[0].getTime()) / 1000;
+        if (spanSec <= 0) return 100.0;
+        const rate = (s.timestamps.length - 1) / spanSec;
+        return Number.isFinite(rate) && rate > 0 ? rate : 100.0;
+      })();
       const response = await fetch('/api/sessions/save', {
         method: 'POST',
         headers: {
@@ -197,7 +225,7 @@ const EEGDataReader: React.FC = () => {
         },
         body: JSON.stringify({
           username: auth.username || 'demo',
-          sampling_rate: 100.0,
+          sampling_rate: observedSamplingRate,
         }),
       });
 
@@ -221,7 +249,7 @@ const EEGDataReader: React.FC = () => {
       return;
     }
 
-    updates.addUpdate(`Exporting live session to CSV (${settings.settings.exportFolder || 'backend/sessions'})...`);
+    updates.addUpdate(`Exporting live session to CSV (${settings.settings.exportFolder || 'backend/export'})...`);
 
     try {
       const response = await fetch('/api/live/export', {
@@ -266,6 +294,12 @@ const EEGDataReader: React.FC = () => {
     sleepData.sleepSessions.find((s) => s.id.startsWith('edf_stream_')) ?? sleepData.selectedSession;
   const statsSession = mode === 'live' ? liveSession : sleepData.selectedSession;
   const sleepStats: SleepStats | null = sleepData.calculateSleepStatsForSession(statsSession);
+
+  // In review mode, mask the streaming flag so VisualizationPanel renders the
+  // review chart instead of the live rolling-window graph.
+  const effectiveStreamState = mode === 'live'
+    ? sleepData.edfStreamState
+    : { ...sleepData.edfStreamState, isStreaming: false };
 
   // Format data for EEGChart (downsample if needed so the chart renders)
   const getChartData = () => {
@@ -467,7 +501,7 @@ const EEGDataReader: React.FC = () => {
               <VisualizationPanel
                 selectedSession={sleepData.selectedSession}
                 settings={settings.settings}
-                edfStreamState={sleepData.edfStreamState}
+                edfStreamState={effectiveStreamState}
                 getSleepStageAtTime={sleepData.getSleepStageAtTime}
                 selectedChannel={selectedChannel}
                 showRawData={showRawData}

@@ -94,6 +94,12 @@ const EEGChart: React.FC<EEGChartProps> = ({
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
   const std = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - avg, 2), 0) / values.length);
 
+  // Derive Y-axis bounds from actual data so the chart auto-scales correctly.
+  const dataRange = max - min || 1;
+  const yPad = dataRange * 0.1;
+  const yDomainMin = Math.floor(min - yPad);
+  const yDomainMax = Math.ceil(max + yPad);
+
   // Get sleep stage statistics
   const stageStats = sleepStages.reduce((acc, stage) => {
     const stageData = data.filter(d => 
@@ -210,7 +216,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
             <div>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9em' }}>Range: </span>
-              <span style={{ color: '#007bff', fontWeight: 'bold' }}>±{yAxisRange} µV</span>
+              <span style={{ color: '#007bff', fontWeight: 'bold' }}>{min.toFixed(0)}–{max.toFixed(0)} µV</span>
             </div>
             <div>
               <span style={{ color: 'var(--text-secondary)', fontSize: '0.9em' }}>Min: </span>
@@ -251,7 +257,8 @@ const EEGChart: React.FC<EEGChartProps> = ({
             <YAxis 
               stroke="var(--text-secondary)"
               tick={{ fontSize: 11 }}
-              domain={[-yAxisRange, yAxisRange]}
+              domain={[yDomainMin, yDomainMax]}
+              tickFormatter={(v: number) => v.toFixed(0)}
               label={{ 
                 value: 'Amplitude (µV)', 
                 angle: -90, 
@@ -296,7 +303,8 @@ const EEGChart: React.FC<EEGChartProps> = ({
             <YAxis 
               stroke="var(--text-secondary)"
               tick={{ fontSize: 11 }}
-              domain={[-yAxisRange, yAxisRange]}
+              domain={[yDomainMin, yDomainMax]}
+              tickFormatter={(v: number) => v.toFixed(0)}
               label={{ 
                 value: 'Amplitude (µV)', 
                 angle: -90, 

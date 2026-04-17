@@ -6,6 +6,13 @@ interface SleepStatsPanelProps {
   settings: AppSettings;
 }
 
+/** Format minutes into a human-readable duration that stays meaningful at any scale. */
+function formatDuration(minutes: number): string {
+  if (minutes >= 60) return `${(minutes / 60).toFixed(2)} h`;
+  if (minutes >= 1) return `${minutes.toFixed(1)} min`;
+  return `${Math.round(minutes * 60)} s`;
+}
+
 const SleepStatsPanel: React.FC<SleepStatsPanelProps> = ({ sleepStats, settings }) => {
   if (!sleepStats) return null;
 
@@ -16,13 +23,20 @@ const SleepStatsPanel: React.FC<SleepStatsPanelProps> = ({ sleepStats, settings 
     rem: 'REM'
   };
 
+  const totalMinutes = parseFloat(sleepStats.totalDuration) * 60;
+  const recordingDurationDisplay = Number.isFinite(totalMinutes)
+    ? (totalMinutes >= 60
+      ? `${(totalMinutes / 60).toFixed(2)} h`
+      : `${totalMinutes.toFixed(2)} min`)
+    : '0.00 min';
+
   return (
     <div className="sleep-stats-panel">
       <h2>Sleep summary</h2>
       <div className="stats-grid">
         <div className="stat-card stat-card-primary">
-          <div className="stat-value">{sleepStats.totalDuration}</div>
-          <div className="stat-label">Recording duration (h)</div>
+          <div className="stat-value">{recordingDurationDisplay}</div>
+          <div className="stat-label">Recording duration</div>
         </div>
         <div className="stat-card stat-card-primary">
           <div className="stat-value">{sleepStats.efficiency === '—' || sleepStats.efficiency === '' ? '—' : `${sleepStats.efficiency}%`}</div>
@@ -38,7 +52,7 @@ const SleepStatsPanel: React.FC<SleepStatsPanelProps> = ({ sleepStats, settings 
             borderColor: settings.sleepStageColors[stage]
           }}>
             <div className="stat-value" style={{ color: settings.sleepStageColors[stage] }}>
-              {(duration / 60).toFixed(2)} h
+              {formatDuration(duration)}
             </div>
             <div className="stat-label" style={{ color: settings.sleepStageColors[stage] }}>
               {stageLabel[stage] ?? stage}

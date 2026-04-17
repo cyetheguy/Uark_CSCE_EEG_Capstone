@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   notifications: true,
   defaultDevice: 'EEG_Sleep_Device',
-  exportFolder: 'backend/sessions',
+  exportFolder: 'backend/export',
   sleepStageColors: {
     awake: '#e53e3e',
     light: '#ed8936',
@@ -41,9 +41,14 @@ const DEFAULT_SETTINGS: AppSettings = {
 function mergeWithDefaults(partial: Partial<AppSettings> | null): AppSettings {
   // Backward/forward compatible merge so older saved settings don't break when we add fields.
   if (!partial) return DEFAULT_SETTINGS;
+  const migratedExportFolder =
+    partial.exportFolder === 'backend/sessions'
+      ? DEFAULT_SETTINGS.exportFolder
+      : partial.exportFolder;
   return {
     ...DEFAULT_SETTINGS,
     ...partial,
+    exportFolder: migratedExportFolder ?? DEFAULT_SETTINGS.exportFolder,
     sleepStageColors: {
       ...DEFAULT_SETTINGS.sleepStageColors,
       ...(partial.sleepStageColors || {})

@@ -21,8 +21,9 @@ bluetooth_samples: List[float] = []
 bluetooth_samples_lock: threading.Lock = threading.Lock()
 
 _HEX_LINE_PREFIX: str = "Value (02x hex): "
-_HEX_ANYWHERE_RE: re.Pattern[str] = re.compile(r"Value \(02x hex\):\s*([0-9a-fA-F\s]*)")
 _HEX_ONLY_LINE_RE: re.Pattern[str] = re.compile(r"^\s*([0-9a-fA-F]+)\s*$")
+# Must match firmware_test/main.c BRAINWAVE_FRAME_MAGIC — only 0xEE + int8 is plotted as EEG.
+BRAINWAVE_FRAME_MAGIC: int = 0xEE
 BACKEND_DIR: Path = Path(__file__).parent
 DESKTOP_EXE: Path = BACKEND_DIR / "CommunicationManager" / "bin" / "Desktop" / "main.exe"
 
@@ -41,64 +42,54 @@ def _desktop_log(msg: str, *, end: str = "\n", flush: bool = True) -> None:
         print(msg, end=end, flush=flush)
 
 
-def _parse_hex_value_line(line: str) -> Tuple[Optional[str], Optional[float]]:
+def _extract_brainwave_samples(raw_bytes: bytes) -> List[float]:
     """
-    Parse the Desktop client's log line format.
-    
-    Expected prefix:
-      "Value (02x hex): <hex bytes...>"
-    
-    Returns:
-    - raw_hex_str: the extracted hex substring (for diagnostics)
-    - parsed_float_or_none: best-effort conversion into a numeric EEG sample
-    
-    Parsing strategy:
-    - Try interpreting the bytes as UTF-8 text containing a number (some firmwares send ASCII).
-    - Otherwise, treat pairs of bytes as little-endian int16 samples and take the first.
-      (This matches many BLE payload designs where each notification is one int16.)
+    Decode bytes from the BM71 transparent notify payload.
+
+    Wire format (firmware_test/main.c): [0xEE][raw_lo][raw_hi] — int16 LE microvolts, 250 SPS.
+    Legacy: a single-byte notify is treated as one signed int8 (older firmware without magic).
+
+    Any bytes that are not part of an 0xEE+int16LE triple (and not the lone-byte legacy case) are
+    ignored so control traffic / framing noise does not reach the visualizer.
+    """
+    out: List[float] = []
+    i = 0
+    n: int = len(raw_bytes)
+    while i + 2 < n:
+        if raw_bytes[i] == BRAINWAVE_FRAME_MAGIC:
+            out.append(float(int.from_bytes(raw_bytes[i + 1 : i + 3], byteorder="little", signed=True)))
+            i += 3
+        else:
+            i += 1
+    if not out and n == 1:
+        out.append(float(int.from_bytes(raw_bytes, byteorder="big", signed=True)))
+    return out
+
+
+def _parse_hex_value_line(line: str) -> Tuple[Optional[str], List[float]]:
+    """
+    Parse the Desktop consumer thread line only:
+      "Value (02x hex): <hex pairs...>"
     """
     line = line.strip()
     if not line.startswith(_HEX_LINE_PREFIX):
-        return None, None
+        return None, []
     raw_hex: str = line[len(_HEX_LINE_PREFIX):].strip()
     if not raw_hex:
-        return raw_hex or None, None
-    
+        return None, []
+
     hex_chars: str = re.sub(r"[^0-9a-fA-F]", "", raw_hex)
+    if not hex_chars:
+        return None, []
     if len(hex_chars) % 2:
         hex_chars = "0" + hex_chars
     try:
         raw_bytes: bytes = bytes.fromhex(hex_chars)
     except ValueError:
-        return raw_hex, None
-        
-    try:
-        s: str = raw_bytes.decode("utf-8")
-        return raw_hex, float(s.strip())
-    except (ValueError, UnicodeDecodeError):
-        pass
-
-    # Firmware binary frame support:
-    # observed payload shape: 01 01 <ch1_lo> <ch1_hi> <ch2_lo> <ch2_hi>
-    # where first two bytes are a frame marker/version.
-    # ch1 has looked like a ramp/counter in live tests, so use ch2 for EEG.
-    if len(raw_bytes) >= 4 and raw_bytes[0] == 0x01 and raw_bytes[1] == 0x01:
-        import struct
-        if len(raw_bytes) >= 6:
-            primary_value: int = struct.unpack_from("<h", raw_bytes, 4)[0]
-        else:
-            primary_value = struct.unpack_from("<h", raw_bytes, 2)[0]
-        return raw_hex, float(primary_value)
-        
-    if len(raw_bytes) >= 2:
-        import struct
-        vals: List[int] = []
-        for i in range(0, len(raw_bytes), 2):
-            if i + 2 <= len(raw_bytes):
-                vals.append(struct.unpack_from("<h", raw_bytes, i)[0])
-        if vals:
-            return raw_hex, float(vals[0])
-    return raw_hex, None
+        return raw_hex, []
+    if not raw_bytes:
+        return raw_hex, []
+    return raw_hex, _extract_brainwave_samples(raw_bytes)
 
 def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
     """
@@ -120,32 +111,36 @@ def _drain_desktop_stdout(proc: subprocess.Popen) -> None:
             return
         for line in proc.stdout:
             _desktop_log(f"[Desktop] {line}", end="", flush=True)
-            # Desktop logs can interleave lines (BM71 debug + Value lines), so parse
-            # Value payloads even when split across lines.
-            line_candidates: List[Tuple[str, str]] = []
-            for m in _HEX_ANYWHERE_RE.finditer(line):
-                payload: str = m.group(1).strip()
-                if payload:
-                    line_candidates.append((line.strip(), payload))
-                else:
+            stripped: str = line.strip()
+            # Only accept the dedicated consumeSampleQueue() line. Do not match
+            # "Value (02x hex):" embedded inside BM71 debug lines (stdout interleaving).
+            if stripped.startswith(_HEX_LINE_PREFIX):
+                rest: str = stripped[len(_HEX_LINE_PREFIX):].strip()
+                if not rest:
                     _awaiting_split_hex_payload = True
-
-            if _awaiting_split_hex_payload and not line_candidates:
-                m_only = _HEX_ONLY_LINE_RE.match(line.strip())
+                else:
+                    _awaiting_split_hex_payload = False
+                    raw_hex_diag, values = _parse_hex_value_line(stripped)
+                    bluetooth_hex_lines.append({"raw": stripped, "hex": raw_hex_diag or ""})
+                    if values:
+                        with bluetooth_samples_lock:
+                            for value in values:
+                                bluetooth_samples.append(value)
+                                if len(bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
+                                    bluetooth_samples.pop(0)
+            elif _awaiting_split_hex_payload:
+                m_only = _HEX_ONLY_LINE_RE.match(stripped)
                 if m_only:
-                    line_candidates.append((line.strip(), m_only.group(1)))
-                    _awaiting_split_hex_payload = False
-                elif line.strip():
-                    _awaiting_split_hex_payload = False
-
-            for raw_line, raw_hex in line_candidates:
-                bluetooth_hex_lines.append({"raw": raw_line, "hex": raw_hex})
-                _, value = _parse_hex_value_line(f"{_HEX_LINE_PREFIX}{raw_hex}")
-                if value is not None:
-                    with bluetooth_samples_lock:
-                        bluetooth_samples.append(value)
-                        if len(bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
-                            bluetooth_samples.pop(0)
+                    combined: str = f"{_HEX_LINE_PREFIX}{m_only.group(1).strip()}"
+                    raw_hex_diag, values = _parse_hex_value_line(combined)
+                    bluetooth_hex_lines.append({"raw": stripped, "hex": raw_hex_diag or ""})
+                    if values:
+                        with bluetooth_samples_lock:
+                            for value in values:
+                                bluetooth_samples.append(value)
+                                if len(bluetooth_samples) > BLUETOOTH_SAMPLES_MAX:
+                                    bluetooth_samples.pop(0)
+                _awaiting_split_hex_payload = False
     except Exception:
         pass
 
@@ -222,12 +217,16 @@ def stream_live_data() -> Generator[str, None, None]:
       yield "data: <json-string>\\n\\n"
     
     This function implements a simple "tail -f" of `bluetooth_samples`:
-    - `last_len` tracks how many samples the client has already seen.
-    - We send only the new appended samples on each loop.
+    - `last_len` tracks how many samples this SSE client has already seen.
+    - We initialize `last_len` to the current buffer length so a newly opened
+      stream starts from "now" (new incoming samples only), rather than replaying
+      historical buffered samples from prior acquisitions/logins.
+    - We then send only newly appended samples on each loop.
     """
     sample_count: int = 0
     start_time: float = time.time()
-    last_len: int = 0
+    with bluetooth_samples_lock:
+        last_len: int = len(bluetooth_samples)
     while True:
         new_samples: List[float] = []
         with bluetooth_samples_lock:

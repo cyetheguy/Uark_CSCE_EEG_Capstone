@@ -1,6 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { SleepSessionData, SleepStage, SessionMetadata, SleepStats, EDFStreamState } from '../types';
-import { computeSleepStagesFromAmplitude, EPOCH_SEC } from '../utils/sleepStagesFromAmplitude';
+import {
+  computeLabelsFromAmplitude,
+  labelsToSegments,
+  EPOCH_SEC,
+} from '../utils/sleepStagesFromAmplitude';
 
 /**
  * Central "model" hook for the EEGDataReader UI.
@@ -29,11 +33,24 @@ export const useSleepData = () => {
   });
   
   const edfEventSourceRef = useRef<EventSource | null>(null);
-  const liveStreamSfreqRef = useRef(100);
+  const liveStreamSfreqRef = useRef(250);
   const lastStageRecomputeMsRef = useRef(0);
+
+  // When false the live stream still accumulates data but does not touch selectedSession,
+  // allowing review-mode session selection to remain undisturbed.
+  const liveUpdateSelectedRef = useRef(true);
 
   // Throttle staging recomputation: recomputing on every incoming sample would be expensive.
   const STAGE_RECOMPUTE_MS = 2000;
+
+  // Append-only hypnogram: once an epoch's label is committed here, it is NEVER changed.
+  // This prevents the percentile-based staging algorithm from retroactively relabeling
+  // past epochs every time a new one arrives (which previously caused the whole hypnogram
+  // to flicker between stages).
+  const committedLabelsRef = useRef<number[]>([]);
+  const committedEpochsRef = useRef(0);
+  // Commit from the first complete epoch so live hypnogram updates every epoch (30 s).
+  const CALIBRATION_EPOCHS = 1;
 
   // AASM standard: one stage per 30-second epoch. Demo data still uses synthetic cycling below.
   const generateMockSleepStages = useCallback((start: Date, end: Date, isLiveDemo: boolean = false): SleepStage[] => {
@@ -165,14 +182,22 @@ export const useSleepData = () => {
      setSessionList(demoList);
   }, []);
 
+  const isStreamActive = useCallback((): boolean => {
+    return edfEventSourceRef.current !== null && edfEventSourceRef.current.readyState !== EventSource.CLOSED;
+  }, []);
+
   const loadEDFPlot = useCallback(async (username: string = 'demo', mode: 'live' | 'review' = 'live') => {
+    if (isStreamActive()) {
+      console.log('Live stream already active — skipping duplicate loadEDFPlot');
+      return;
+    }
     setIsLoading(true);
     const modeParam = mode === 'live' ? 'live' : 'review';
     console.log(`Initializing stream (mode=${modeParam})...`);
 
     try {
       // Ask backend which file/source we are streaming and what sampling rate to assume.
-      // Live mode is fixed at ~100Hz in the backend; review mode reads from EDF metadata.
+      // Live mode returns 250 Hz (firmware TX_PERIOD_MS=4); review reads from EDF metadata.
       const infoResponse = await fetch(`/api/edf/info?username=${encodeURIComponent(username)}&mode=${modeParam}`);
       const infoData = await infoResponse.json();
       
@@ -183,8 +208,10 @@ export const useSleepData = () => {
         return;
       }
 
-      liveStreamSfreqRef.current = typeof infoData.sampling_rate === 'number' ? infoData.sampling_rate : 100;
+      liveStreamSfreqRef.current = typeof infoData.sampling_rate === 'number' ? infoData.sampling_rate : 250;
       lastStageRecomputeMsRef.current = 0;
+      committedLabelsRef.current = [];
+      committedEpochsRef.current = 0;
       
       const now = new Date();
       const sessionStart = new Date(now);
@@ -220,8 +247,10 @@ export const useSleepData = () => {
       edfEventSourceRef.current = eventSource;
       
       let sampleCount = 0;
-      let lastPlottedSecond = -1;
       const rawValues: number[] = [];
+      let streamTimestampOffsetSec: number | null = null;
+      let lastReactUpdateMs = 0;
+      const REACT_UPDATE_INTERVAL_MS = 66; // ~15 Hz React state updates
       
       eventSource.onmessage = (event) => {
         try {
@@ -234,34 +263,97 @@ export const useSleepData = () => {
             return;
           }
           
-          const timestamp = new Date(sessionStart.getTime() + data.timestamp * 1000);
+          // Some backends start SSE timestamps at a non-zero value. Normalize so the
+          // first sample in this stream is always t=0; otherwise the first committed
+          // 30 s epoch can appear as a partial slice (e.g., 16 s) in Sleep summary.
+          if (streamTimestampOffsetSec === null) {
+            streamTimestampOffsetSec = typeof data.timestamp === 'number' ? data.timestamp : 0;
+          }
+          const normalizedTimestampSec = Math.max(
+            0,
+            (typeof data.timestamp === 'number' ? data.timestamp : 0) - streamTimestampOffsetSec
+          );
+          const timestamp = new Date(sessionStart.getTime() + normalizedTimestampSec * 1000);
           rawValues.push(data.value);
 
-          // Plot/UI is intentionally downsampled to 1 point per second for smoother rendering.
-          const sf = liveStreamSfreqRef.current;
-          const tsSecond = Math.floor(timestamp.getTime() / 1000);
-          if (tsSecond !== lastPlottedSecond) {
-            lastPlottedSecond = tsSecond;
-            streamSession.timestamps.push(timestamp);
-            streamSession.channelData.push([data.value]);
-            const updatedSession = {
-              ...streamSession,
-              timestamps: [...streamSession.timestamps],
-              channelData: streamSession.channelData.map((row) => [...row]),
-              sleepStages: [...streamSession.sleepStages],
-            };
-            setSelectedSession(updatedSession);
-            setSleepSessions([updatedSession]);
+          streamSession.timestamps.push(timestamp);
+          streamSession.channelData.push([data.value]);
+
+          // Derive the actual sampling rate from observed data rather than the
+          // backend-reported value. The BLE/SSE pipeline may deliver far fewer
+          // samples/sec than the firmware's nominal 250 SPS.
+          const elapsedSec = (timestamp.getTime() - sessionStart.getTime()) / 1000;
+          const observedSf = elapsedSec > 1 ? rawValues.length / elapsedSec : liveStreamSfreqRef.current;
+
+          // Append-only staging: past epochs never get relabeled. We only run the algorithm
+          // often enough to classify newly-completed epochs, and we never overwrite older
+          // committed labels. This keeps the hypnogram, the sleep summary, and the current
+          // stage indicator all stable across time.
+          const epochSamples = Math.max(1, Math.round(EPOCH_SEC * observedSf));
+          const totalCompletedEpochs = Math.floor(rawValues.length / epochSamples);
+
+          if (committedEpochsRef.current === 0 && totalCompletedEpochs < CALIBRATION_EPOCHS) {
+            // Still calibrating — no commits yet, no hypnogram yet. Guarded on the committed
+            // counter so a transient drop in observedSf (which can inflate epochSamples and
+            // shrink totalCompletedEpochs) never wipes an already-committed hypnogram.
+            streamSession.sleepStages = [];
+          } else if (totalCompletedEpochs > committedEpochsRef.current) {
+            const nowStageMs = Date.now();
+            if (nowStageMs - lastStageRecomputeMsRef.current >= STAGE_RECOMPUTE_MS) {
+              lastStageRecomputeMsRef.current = nowStageMs;
+
+              // Run the algorithm over the full buffer to get the best available labels
+              // *right now*, but only use it to fill in epochs we haven't yet committed.
+              const freshLabels = computeLabelsFromAmplitude(rawValues, observedSf);
+
+              if (committedEpochsRef.current === 0) {
+                // First commit: freeze the first CALIBRATION_EPOCHS labels in one shot.
+                const initial = freshLabels.slice(0, CALIBRATION_EPOCHS);
+                committedLabelsRef.current = initial;
+                committedEpochsRef.current = initial.length;
+              }
+
+              // Catch up any further completed epochs one-by-one (handles throttling/jitter).
+              while (
+                committedEpochsRef.current < totalCompletedEpochs &&
+                committedEpochsRef.current < freshLabels.length
+              ) {
+                committedLabelsRef.current.push(freshLabels[committedEpochsRef.current]);
+                committedEpochsRef.current += 1;
+              }
+
+              // Rebuild the session's stage segments from the frozen label array.
+              streamSession.sleepStages = labelsToSegments(
+                committedLabelsRef.current,
+                sessionStart,
+              );
+            }
           }
 
-          const epochSamples = Math.max(1, Math.round(EPOCH_SEC * sf));
-          if (rawValues.length >= epochSamples) {
-            const nowMs = Date.now();
-            if (nowMs - lastStageRecomputeMsRef.current >= STAGE_RECOMPUTE_MS) {
-              lastStageRecomputeMsRef.current = nowMs;
-              // Staging returns *segments* (start/end/duration), not per-sample labels.
-              // We replace `streamSession.sleepStages` in-place to keep the session object stable.
-              streamSession.sleepStages = computeSleepStagesFromAmplitude(rawValues, sf, sessionStart);
+          // Throttle React state updates to ~15 Hz to avoid overwhelming rendering.
+          const nowMs = Date.now();
+          if (nowMs - lastReactUpdateMs >= REACT_UPDATE_INTERVAL_MS) {
+            lastReactUpdateMs = nowMs;
+            const updatedSession: SleepSessionData = {
+              ...streamSession,
+              // Snapshot the current array lengths so React detects a new object even
+              // though the underlying arrays are shared (avoids deep-copy overhead).
+              timestamps: streamSession.timestamps.slice(),
+              channelData: streamSession.channelData.slice(),
+              sleepStages: [...streamSession.sleepStages],
+            };
+
+            // Always persist the live session in sleepSessions (preserving any
+            // review-mode sessions that may also be loaded).
+            setSleepSessions(prev => {
+              const rest = prev.filter(s => !s.id.startsWith('edf_stream_'));
+              return [...rest, updatedSession];
+            });
+
+            // Only overwrite the displayed session when in live mode so review
+            // session selection is not stomped by background live updates.
+            if (liveUpdateSelectedRef.current) {
+              setSelectedSession(updatedSession);
             }
           }
           
@@ -379,7 +471,9 @@ export const useSleepData = () => {
     const startMs = timestamps[0].getTime();
     const endMs = timestamps[n - 1].getTime();
     const totalMinutes = (endMs - startMs) / 60000;
-    const totalDurationHours = (totalMinutes / 60).toFixed(2);
+    // Keep full precision so the UI duration can update every second.
+    // Rounding to 2 decimals in hours only updates every ~36 seconds.
+    const totalDurationHours = String(totalMinutes / 60);
 
     const stageDurations: Record<string, number> = { awake: 0, light: 0, deep: 0, rem: 0 };
     let awakeMinutes = 0;
@@ -424,12 +518,20 @@ export const useSleepData = () => {
     return calculateSleepStatsForSession(selectedSession);
   }, [calculateSleepStatsForSession, selectedSession]);
 
+  const setLiveUpdateEnabled = useCallback((enabled: boolean) => {
+    liveUpdateSelectedRef.current = enabled;
+  }, []);
+
   const cleanupStreams = useCallback(() => {
     if (edfEventSourceRef.current) {
       console.log("Closing EventSource");
       edfEventSourceRef.current.close();
       edfEventSourceRef.current = null;
     }
+    setEdfStreamState({ isStreaming: false, plotError: '' });
+    committedLabelsRef.current = [];
+    committedEpochsRef.current = 0;
+    lastStageRecomputeMsRef.current = 0;
   }, []);
 
   return {
@@ -449,6 +551,8 @@ export const useSleepData = () => {
     getSleepStageAtTime,
     calculateSleepStatsForSession,
     calculateSleepStats,
-    cleanupStreams
+    cleanupStreams,
+    isStreamActive,
+    setLiveUpdateEnabled
   };
 };

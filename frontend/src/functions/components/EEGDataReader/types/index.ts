@@ -37,9 +37,12 @@ export interface SessionMetadata {
 
 export interface SleepStats {
   totalDuration: string;
+  /** Per-stage overlap with the recording window, in minutes (not hours). */
   stageDurations: Record<string, number>;
   efficiency: string;
   numCycles: number;
+  /** Recording minutes in [first, last] plot timestamp not covered by any stage overlap (see useSleepData). */
+  unscoredMinutes?: number;
 }
 
 export interface ChartDataPoint {

@@ -39,18 +39,20 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
 
   return (
     <div className="settings-screen">
-      <div className="settings-header">
-        <h2>Sleep Session Settings</h2>
-        <button 
-          onClick={onClose}
-          className="close-settings-button"
-        >
-          ×
-        </button>
-      </div>
-      
-      <div className="settings-content">
-        <div className="settings-group">
+      <div className="settings-dialog">
+        <div className="settings-header">
+          <h2>Sleep Session Settings</h2>
+          <button
+            onClick={onClose}
+            className="close-settings-button"
+            aria-label="Close settings"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="settings-content">
+          <div className="settings-group">
           <h3>Display</h3>
           <div className="setting-item">
             <label>Theme</label>
@@ -65,7 +67,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         </div>
         
-        <div className="settings-group">
+          <div className="settings-group">
           <h3>Sleep Visualization</h3>
           <div className="setting-item checkbox">
             <label>
@@ -79,7 +81,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         </div>
         
-        <div className="settings-group">
+          <div className="settings-group">
           <h3>Sleep Stage Colors</h3>
           <div className="sleep-stage-colors">
             {Object.entries(settings.sleepStageColors).map(([stage, color]) => (
@@ -106,7 +108,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         </div>
 
-        <div className="settings-group">
+          <div className="settings-group">
           <h3>Data Management</h3>
           <div className="setting-item">
             <label>Export Folder</label>
@@ -135,13 +137,14 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         </div>
         
-        <div className="settings-actions">
-          <button 
-            onClick={onResetSettings}
-            className="reset-settings-button"
-          >
-            Reset to Defaults
-          </button>
+          <div className="settings-actions">
+            <button
+              onClick={onResetSettings}
+              className="reset-settings-button"
+            >
+              Reset to Defaults
+            </button>
+          </div>
         </div>
       </div>
     </div>

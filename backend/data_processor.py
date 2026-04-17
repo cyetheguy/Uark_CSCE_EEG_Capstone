@@ -20,6 +20,7 @@ from sleep_stages_amplitude import compute_sleep_stages_amplitude
 
 BACKEND_DIR: Path = Path(__file__).parent
 SESSIONS_DIR: Path = BACKEND_DIR / "sessions"
+EXPORT_DIR: Path = BACKEND_DIR / "export"
 
 # Plotting/streaming parameters are tuned for interactive UX:
 # - WINDOW_SECONDS controls how much signal the plot shows at a time.
@@ -363,7 +364,7 @@ def export_csv(samples: List[float], username: str, filename: str, sampling_rate
         if not target_dir.is_absolute():
             target_dir = (BACKEND_DIR.parent / target_dir).resolve()
     else:
-        target_dir = SESSIONS_DIR
+        target_dir = EXPORT_DIR
 
     if not target_dir.exists():
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -470,6 +471,8 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
         raise FileNotFoundError("Session not found")
 
     samples: List[float] = []
+    sample_interval_ms: int = 1000
+    raw_duration_ms: int = 0
     start_dt: datetime = datetime.now()
     sfreq: float = 100.0
     raw_for_stages: Optional[np.ndarray] = None
@@ -488,11 +491,15 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
             
         if raw_samples:
             raw_for_stages = np.asarray(raw_samples, dtype=np.float64)
-        # Downsample to ~1Hz for review mode performance.
-        # The UI only needs a coarse trend line for long sessions; the full-rate samples
-        # remain in the encrypted file and can be exported separately if needed.
-        step: int = max(1, int(round(sfreq)))
+            if sfreq > 0:
+                raw_duration_ms = int(round((len(raw_samples) / sfreq) * 1000))
+        # Keep full fidelity for small/medium sessions; only downsample very large sessions
+        # for frontend rendering performance.
+        max_review_points: int = 20000
+        step: int = max(1, (len(raw_samples) + max_review_points - 1) // max_review_points)
         samples = [float(raw_samples[i]) for i in range(0, len(raw_samples), step)]
+        if sfreq > 0:
+            sample_interval_ms = max(1, int(round((step / sfreq) * 1000)))
 
     # --- HANDLE RAW DEMO .EDF FILES ---
     elif path.suffix.lower() == ".edf":
@@ -502,8 +509,13 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
         
         samples_arr, sfreq, _ = read_edf_samples(str(path), channel_idx=0, max_samples=max_samples)
         raw_for_stages = np.asarray(samples_arr, dtype=np.float64)
-        step = max(1, int(round(sfreq)))
+        if sfreq > 0:
+            raw_duration_ms = int(round((len(samples_arr) / sfreq) * 1000))
+        max_review_points = 20000
+        step = max(1, (len(samples_arr) + max_review_points - 1) // max_review_points)
         samples = [float(samples_arr[i]) for i in range(0, len(samples_arr), step)]
+        if sfreq > 0:
+            sample_interval_ms = max(1, int(round((step / sfreq) * 1000)))
         
         startdate, starttime, _ = get_edf_start_and_duration(path)
         try:
@@ -518,10 +530,9 @@ def get_session_data_payload(session_id: str) -> Dict[str, Any]:
 
     # --- COMMON PAYLOAD BUILDER ---
     start_ms: int = int(start_dt.timestamp() * 1000)
-    timestamps_ms: List[int] = [start_ms + i * 1000 for i in range(len(samples))]
-    
-    duration_ms: int = len(samples) * 1000
-    end_ts: int = start_ms + duration_ms
+    timestamps_ms: List[int] = [start_ms + i * sample_interval_ms for i in range(len(samples))]
+    sampled_duration_ms: int = 0 if len(samples) <= 1 else (len(samples) - 1) * sample_interval_ms
+    end_ts: int = start_ms + (raw_duration_ms if raw_duration_ms > 0 else sampled_duration_ms)
     if raw_for_stages is not None and raw_for_stages.size >= 2:
         # Sleep stages are computed from the *raw* (non-downsampled) signal to preserve
         # the amplitude dynamics the stage classifier expects.
