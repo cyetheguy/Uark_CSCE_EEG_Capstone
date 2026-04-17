@@ -30,8 +30,12 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
   onGenerateDemoSessionList,
   onClearData
 }) => {
+  const shouldExpandReviewPanel = mode === 'review' && selectedSession === null;
+
   return (
-    <div className={`session-panel ${mode === 'review' ? 'review-mode' : ''}`}>
+    <div
+      className={`session-panel ${mode === 'review' ? 'review-mode' : ''} ${shouldExpandReviewPanel ? 'review-empty-state' : ''}`}
+    >
       <div className="panel-header">
         <h2>{mode === 'live' ? 'Live Sessions' : 'Sleep Sessions'}</h2>
         {mode === 'review' && (
