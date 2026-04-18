@@ -10,6 +10,7 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 &emsp;&emsp;- [Device Setup](#device-setup)<br>
 &emsp;&emsp;- [Device Activation](#device-activation)<br>
 &emsp;\* [T - Tracer](#t---tracer)<br>
+&emsp;&emsp;- [System Requirements](#system-requirements)<br>
 &emsp;&emsp;- [Installation](#installation)<br>
 &emsp;&emsp;&emsp;- [Python](#python)<br>
 &emsp;&emsp;&emsp;- [React](#react)<br>
@@ -20,6 +21,7 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 &emsp;&emsp;- [Navigation](#navigation)<br>
 &emsp;&emsp;- [Session Recording](#session-recording)<br>
 &emsp;&emsp;- [Session Review](#session-review)<br>
+&emsp;&emsp;- [Debug Mode](#debug-mode)<br>
 &emsp;\* [Contributions](#contributions)<br>
 &emsp;&emsp;- [Computer Science and Computer Engineering](#computer-science-and-computer-engineering)<br>
 &emsp;&emsp;- [Electrical Engineering](#electrical-engineering)<br>
@@ -41,6 +43,14 @@ Fill me<br>
 # T - Tracer
 ![DreamT Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamT_HORZ_wp.png)
 The DreamRT project is run locally on a Windows-based PC.
+## System Requirements
+* Windows 10/11 Operating System
+* Bluetooth 4.0+
+>[!NOTE]
+>This project has been designed to run on a single, Windows-based PC.<br>
+>Installation was experimented on MacOS and Linux. This feature is unofficial and may produce glitches and other unseen errors.<br>
+>Using the install script, network access to this software is possible. This is unofficial and may produce glitches and other unseen errors.
+><br>
 ## Installation
 >[!TIP]
 ><br>Installation can be achieved quickly by downloading and running this executable:
@@ -54,9 +64,6 @@ The DreamRT project is run locally on a Windows-based PC.
 >```
 ><br>
 In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from the main GitHub repository.
->[!NOTE]
->All instructions are designed to run inside the Windows terminal. Installations on MacOS and Linux is not officially supported and may have various success.
-><br>
 ### Python
 Python 3.14 is the recommended version of Python to install. This version can be installed by visiting the [Python website](https://www.python.org/) or by entering the following commands:
 ```
@@ -162,6 +169,14 @@ Once you have finished your session, choose to save or export your session.
 To review a session, go to Review Sessions.<br>
 The Sleep Sessions section should automatically populate with the sessions you have access to. Select a session to load it (this make take some time).<br>
 A loaded session will remain loaded until a user is logged out.
+## Debug Mode
+>[!WARNING]
+>Debug mode is not intended for commercial use. This is reserved for debugging purposes ONLY!<br>
+>Compromising risks arise with debug mode enabled.
+><br>
+
+As part of its development, the Computer Science and Computer Engineering team developed a debug mode into the DreamRT software. To enable this debug feature, use the flag ```--debug``` on startup.<br>
+Debug mode outputs messages inside the terminal. These messages can be used to help verify client-server communication, user interaction, device connection and pairing, as well as file management.<br>
 # Contributions
 ## Computer Science and Computer Engineering
 DreamR firmware and DreamT software was designed and developed by Team 17 of the Uark CSCE Capstone I&II class of 2025-2026. The following are the names and GitHub accounts of each member:<br>
