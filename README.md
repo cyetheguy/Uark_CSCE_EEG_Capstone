@@ -104,7 +104,7 @@ To create a new account, start the software and select <ins>Create one</ins>. Th
 >Remember your password. THERE IS NOT PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
 ><br>
 ### User Settings
-<img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_User_Settings.JPG" width="50%"></img>
+<img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_User_Settings.JPG" width="50%"></img><br>
 Once logged in, you may modify your experience by navigaiting to the <ins>⚙ Settings</ins> button located in the top-right corner of your window. All settings you modify will affect only your account.<br><br>
 The following settings are available to the user:
 * ```Theme``` - Affects full window color scheme
