@@ -11,11 +11,21 @@ import logging
 from flask import Flask, request, jsonify, send_file, Response, cli
 from flask_cors import CORS
 
+from runtime_paths import get_backend_data_root, ensure_runtime_data_dirs
+
+# IMPORTANT: seed the writable data directory (sessions/, user/, export/)
+# BEFORE importing `crypto_ops`. In packaged builds, `crypto_ops` captures a
+# list of `.USR` files at import time, and the demo/admin credentials that
+# ship inside the PyInstaller bundle only become visible on disk once
+# `ensure_runtime_data_dirs()` copies them into the user's writable
+# `backend-data/user` folder. Seeding here guarantees the demo credentials
+# work on first launch of a fresh install.
+ensure_runtime_data_dirs()
+
 import debug
 import crypto_ops
 import ble_comms
 import data_processor
-from runtime_paths import get_backend_data_root, ensure_runtime_data_dirs
 
 
 def _redirect_frozen_streams() -> None:
@@ -339,6 +349,9 @@ def get_edf_info() -> Tuple[Response, int]:
         return jsonify({"success": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
+    # `ensure_runtime_data_dirs()` already ran at import time (see top of
+    # this module); calling it again here is a no-op on subsequent starts
+    # and keeps correctness even if someone imports main differently later.
     ensure_runtime_data_dirs()
     for arg in sys.argv[1:]:
         if arg == "--debug":

@@ -41,9 +41,11 @@ export const useAuth = () => {
     e.preventDefault();
     setIsLoading(true);
     setLoginError('');
-    
-    // Small delay to make the UI feel responsive (and to avoid "flash" on fast local calls).
-    await new Promise(resolve => setTimeout(resolve, 800));
+
+    // The backend's PBKDF2 (200k iterations, per .USR file) already takes
+    // a noticeable amount of time on a typical desktop; adding an artificial
+    // delay on top of that made the form feel frozen for several seconds
+    // after account creation. Let the real request drive the spinner.
     try {
       const response = await fetch('/api/login', {
         method: 'POST',

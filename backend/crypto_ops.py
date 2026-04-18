@@ -53,6 +53,14 @@ def authenticate(input_username: str, input_password: str) -> bool:
     global USR_KEY
     global all_usr
 
+    # Rescan the user directory on every call. The module-level snapshot of
+    # `all_usr` is taken at import time, which in packaged (PyInstaller)
+    # builds is BEFORE `ensure_runtime_data_dirs()` seeds the writable user
+    # folder with the bundled demo credentials. Without this refresh,
+    # demo/admin logins would always fail on a fresh install, and newly
+    # created accounts would not be discoverable across process restarts.
+    all_usr = _list_usr_files()
+
     if not all_usr:
         printDebug("[!] No .USR files found.")
         return False
@@ -95,6 +103,11 @@ def create_usr_file(username: str, password: str) -> bool:
     Returns False | file was not created
     """
     global all_usr
+
+    # Refresh the on-disk user list so we never collide with a .USR file that
+    # was seeded or created after this module was imported (see notes in
+    # `authenticate`).
+    all_usr = _list_usr_files()
 
     # Verify that no usr currently exists
     if authenticate(username, password):
