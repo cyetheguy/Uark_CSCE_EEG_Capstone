@@ -6,12 +6,17 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 <br><br>
 **Table of Contents:**<br>
 &emsp;\* [Project Overview](#project-overview)<br>
-&emsp;* [DreamR](#dreamr)<br>
+&emsp;* [R - Reader](#dreamr)<br>
 &emsp;&emsp;- [Device Setup](#device-setup)<br>
 &emsp;&emsp;- [Device Activation](#device-activation)<br>
-&emsp;\* [DreamT](#dreamt)<br>
+&emsp;\* [T - Tracer](#dreamt)<br>
 &emsp;&emsp;- [Installation](#installation)<br>
-&emsp;&emsp;- [User Configuration](#user-configuration)<br>
+&emsp;&emsp;&emsp;- [Python](#python)<br>
+&emsp;&emsp;&emsp;- [React](#react)<br>
+&emsp;&emsp;&emsp;- [Codebase](#codebase)<br>
+&emsp;&emsp;- [User Accounts](#user-accounts)<br>
+&emsp;&emsp;&emsp;- [Account Creation](#account-creation)<br>
+&emsp;&emsp;&emsp;- [User Settings](#user-settings)<br>
 &emsp;&emsp;- [Navigation](#navigation)<br>
 &emsp;&emsp;- [Session Recording](#session-recording)<br>
 &emsp;&emsp;- [Session Review](#session-review)<br>
@@ -23,31 +28,135 @@ Sleep monitoring via electroencephalograms (EEG) is critical for diagnosing and 
 To address this market gap, this project seeks to create a wireless EEG system designed for ease of use, comfort, and portability. The DreamR device will transmit brainwave reading data via Bluetooth Low Energy, enabling real-time monitoring without the constraints of traditional setups. The DreamT software is used to visualize and store the transmitted data privately for each user, allowing them to securely track their personal sleep patterns over time. This software solution aims to provide consumers with tools and resources to utilize this efficient EEG model. Both components provide greater data transparency and control for users, expanding its commercial market.<br>
 # DreamR
 ![DreamR Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamR_HORZ_wp.png)
-Fill me<br>
+The DreamRT board is an EEG board<br
 ## Device Setup
-Fill me<br>
+To begin
 ## Device Activation
 Fill me<br>
 # DreamT
 ![DreamT Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamT_HORZ_wp.png)
-Fill me<br>
+The DreamRT project is run locally on a Windows-based PC.
 ## Installation
 >[!TIP]
-><br>This program can be installed and immmediately run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
+><br>Installation can be achieved quickly by downloading and running this executable:
+>```
+>NEEDINSTALLERHERE
+>```
+><br>Alternatively, this program can be installed and immmediately run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
 >
 >```
 >.\eeg_app.bat --install
 >```
 ><br>
-Installation Guide goes here<br> 
-## User Configuration
-Fill me<br>
+In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from the main GitHub repository.
+>[!NOTE]
+>All instructions are designed to run inside the Windows terminal. Installations on MacOS and Linux is not officially supported and may have various success.
+><br>
+### Python
+Python 3.14 is the recommended version of Python to install. This version can be installed by visiting the [Python website](https://www.python.org/) or by entering the following commands:
+```
+winget install 9NQ7512CXL7T --silent --accept-package-agreements --accept-source-agreements
+```
+This installs the Python library manager. You can then install Python 3.14 using the following:
+```
+py install 3.14 >> install_log.txt 2>&1
+```
+[Pip](https://pypi.org/project/pip/) is used to install additional libraries. Verify that pip is installed and using the latest version using:
+```
+py -m ensurepip --upgrade
+py -m pip install --upgrade pip
+```
+Use pip to install the additional libaries:<br>
+* PyCryptodome (cryptographic operations)&emsp;```py -m pip install pycryptodome```<br>
+* Flask (frontend-backend communication)&emsp;  ```py -m pip install Flask flask-cors```<br>
+* Numpy (EEG information processing)&emsp;&emsp;&emsp;```py -m pip install numpy```<br>
+* Matplotlib (Visualizing)&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;```py -m pip install matplotlib```<br>
+### React
+>[!NOTE]
+>Javascript must be installed on your device for this phase. You may be asked to restart your computer.
+><br>
+
+To install the React framework, we must install Node.js:
+```
+nvm install latest
+```
+To install the packages required to run the frontend, navigate to a folder titled "frontend" in your project directory. Then run the following calls:
+```
+call npm install --no-fund --no-audit
+call npm install vite @vitejs/plugin-react --no-fund --no-audit
+call npm install vite --save-dev --no-fund --no-audit
+call npm audit fix
+```
+You may move back to the root software directory.
+### Codebase
+This codebase may be retreived by pulling the [main repository](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main) into your project directory.<br/>
+Congradulations! You have successfully installed the dependencies needed to run DreamRT.
+## User Accounts
+DreamRT accounts are used to securely access private EEG sessions, and control the visual experience while using the software. Integrity is preserved using a [Galois/Counter Mode](https://en.wikipedia.org/wiki/Galois/Counter_Mode) version of the [Advanced Encryption Standard](https://www.nist.gov/publications/advanced-encryption-standard-aes) (AES) cipher protocol with keys being derived using [Password-Based Key Derivation Function 2](https://en.wikipedia.org/wiki/PBKDF2).
+### Account Creation
+To create a new account, start the software and select <ins>Create one</ins>. This will create a popup window to create a new account. Enter a username, and a password with a minimum of six (6) characters. Reenter your password to confirm it, and click <ins>Create Account</ins> to create your account. You may then enter your username/password combo in the login screen to begin using your account!
+>[!CAUTION]
+>Remember your password. THERE IS NOT PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
+><br>
+### User Settings
+![Snippet showing visual and practical settings accessible to the user]()
+Once logged in, you may modify your experience by navigaiting to the <ins>⚙ Settings</ins> button located in the top-right corner of your window. All settings you modify will affect only your account.<br><br>
+The following settings are available to the user:
+* ```Theme``` - Affects full window color scheme
+* ```Show Sleep Stages``` - Toggles visibility of current sleep stage
+* ```Sleep Stage Colors``` - Allows custom RGB values for Wake, Light, Deep, and REM sleep stages
+* ```Export Folder``` - Gives user ability to change directory when exporting sessions
+All settings may be reverted to default by selecting the <ins>Reset to Defaults</ins> button located at the bottom-right of the Sleep Session Settings window.
 ## Navigation
-Fill me<br>
+![Visualization window]()
+DreamRT is divided into numerous sections.
+* ```Top Bar``` - Displays username, live/review switch, scan, settings, and logout button
+  * ```live/review switch``` - Used to switch between Live Mode and Review Mode
+  * ```🔍 Scan``` - Used to scan and connect to the DreamRT board
+  * ```⚙ Settings``` - Used to access [user settings](#user-settings)
+  * ```Logout``` - Logs user out of software, and returns to login screen
+* ```EEG & Hypnogram``` - Visual window for EEG data
+  * ```Show EEG waveform``` - Toggle between hypnogram and waveform
+  * ```Window``` - Shows EEG data either as sleep stage (hypnogram) or amplitude (waveform)
+  * ```Window slider``` - Enables user to navigate a session in 60 sample segments
+* ```Sleep summary``` - Lists global data summary estimations for a given session (live or past)
+  * ```Recording duration``` - Total length of session
+  * ```Sleep efficiency index``` - Percentage of time spent asleep
+  * ```Est. sleep cycles``` - Estimated number of sleep cycles captured during session
+  * ```Wake``` - Known time user was awake
+  * ```N1/N2 (Light)``` - Estimated time user spent in light sleep
+  * ```N3 (Deep``` - Estimated time user spent in deep sleep
+  * ```REM``` - Known time user was in REM sleep
+* ```Sleep Status```(Live Only) - Provides brief technical summary of current session
+  * ```Samples``` - Number of EEG channel samples collected this session
+  * ```Duration``` - Elapsed time since session start
+  * ```Clear Live Data``` - Erases all data in current session
+* ```Acquisition status``` - Gives live updates on device
+  * ```Data source``` - Where data is coming from (usually BLE)
+  * ```Sampling rate``` - How fast samples are being received
+  * ```Samples acquired``` - How many samples have been acquired
+  * ```Recording duration``` - Elapsed time of sample capture
+  * ```Save encrypted sleep session``` - Saves current session in ```sessions``` folder
+  * ```Export CSV``` - Exports current session in folder chosen by user
+* ```Sleep Sessions```(Review Only) - Lists sessions associated with account
+  * ```🔄 Refresh``` - Sends request and populates with all visible sessions accessible by account
+  * ```YYYY-MM-DD``` - Denotes session user can access
+* ```Loaded file details```(Review Only) - Global information regarding selected session
+  * ```File name``` - Name of file holding session
+  * ```Device``` - Name of device used to capture session
+  * ```Samples loaded``` - Number of samples in session
+  * ```Recording duration``` - Time session was being recorded
 ## Session Recording
-Fill me<br>
+To record a session, go to Live Mode and scan for a device. The session begins automatically once the device is connected and data is being received.<br><br>
+Once you have finished your session, choose to save or export your session.
+>[!IMPORTANT]
+>```SAVE``` - Encrypted EEG session. Only the account that saved the session can access can view it.<br>
+>```EXPORT``` - Unencrypted EEG session. Use when you want to move your session outside DreamRT.
+><br>
 ## Session Review
-Fill me<br>
+To review a session, go to Review Sessions.<br>
+The Sleep Sessions section should automatically populate with the sessions you have access to. Select a session to load it (this make take some time).<br>
+A loaded session will remain loaded until a user is logged out.
 # Contributions
 DreamR firmware and DreamT software was designed and developed by Team 17 of the Uark CSCE Capstone I&II class of 2025-2026. The following are the names and GitHub accounts of each member:<br>
 <br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
