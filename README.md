@@ -8,7 +8,7 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 &emsp;\* [Project Overview](#project-overview)<br>
 &emsp;* [R - Reader](#r---reader)<br>
 &emsp;&emsp;- [Device Setup](#device-setup)<br>
-&emsp;&emsp;- [Device Activation](#device-activation)<br>
+&emsp;&emsp;- [Preparing for Session](#preparing-for-session)<br>
 &emsp;\* [T - Tracer](#t---tracer)<br>
 &emsp;&emsp;- [System Requirements](#system-requirements)<br>
 &emsp;&emsp;- [Installation](#installation)<br>
@@ -35,14 +35,22 @@ To address this market gap, this project seeks to create a wireless EEG system d
 This project is comprised of two components. The [EEG board](#r---reader) was designed and produced by the [Electrical Engineering Capstone Team](#electrical-engineering). The [Software Tracer](#t---tracer) was developed by the [Computer Science and Computer Engineering Capstone Team](#computer-science-and-computer-engineering). There are four key componets to this project. The user interacts with the EEG board and frontend components to capture and visualize EEG data. The board and frontend communicate with the backend, which processes the received data for visualizing while maintaining integrity and authenticity standards. The local directory database is used to house encrypted files.
 # R - Reader
 ![DreamR Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamR_HORZ_wp.png)
-The DreamRT board is an EEG board<br
 ## Device Setup
-To begin
-## Device Activation
-Fill me<br>
+Device setup is simple and straightforward. Ensure battery is charged, and nodes are clean. Place device on user's head. It should sit comfortably.<br>
+Correct device orientation has two nodes above the eyes.
+## Preparing for Session
+Device communication with the software can be achieved in two ways:<br>
+* BLE (preferred)
+* USB-C cable
+
+Both rely on the device being turned on. With the device on, you must [navigate](#navigation) the visualizer to find the scan button. Once it is pressed, it will connect to the device.<br>
+A successful connection will result in a blinking light on the device, and data being received and plotted on the visualizer.<br>
+>[!IMPORTANT]
+>It may take up to 60 seconds before a sleep stage is plotted. This is due to the time it takes to calculate sleep staged. For live feedback, switch to a waveform view.
+><br>
+
 # T - Tracer
 ![DreamT Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamT_HORZ_wp.png)
-The DreamRT project is run locally on a Windows-based PC.
 ## System Requirements
 * Windows 10/11 Operating System
 * Bluetooth 4.0+
@@ -53,16 +61,19 @@ The DreamRT project is run locally on a Windows-based PC.
 ><br>
 ## Installation
 >[!TIP]
-><br>Installation can be achieved quickly by downloading and running this executable:
+><br>Installation and executed can be achieved quickly with our installer:
 >```
 >NEEDINSTALLERHERE
 >```
-><br>Alternatively, this program can be installed and immmediately run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)) via running: 
->
->```
->.\eeg_app.bat --install
->```
 ><br>
+
+>[!TIP]
+>This program can be installed and run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)), and move it into a folder.<br>
+>With the terminal open, run ```.\eeg_app.bat <flags>```. The ```<flags>``` denotes specific install/update features. (You may double click the script if all dependencies are installed)<br>
+>```--install``` installs all depencies listed below<br>
+>```--update``` downloads the latest version of the software and moves it into the folder.<br>
+><br>
+
 In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from the main GitHub repository.
 ### Python
 Python 3.14 is the recommended version of Python to install. This version can be installed by visiting the [Python website](https://www.python.org/) or by entering the following commands:
