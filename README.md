@@ -2,7 +2,7 @@
 
 # DreamRT - Uark Electroencephalogram Capstone Project
 **August 2025 - May 2026<br>
-Collaboration between Computer Science Computer Engineering, Electrical Engineering, and Biomedical Engineering Capstone teams**
+Collaboration between Computer Science and Computer Engineering, Electrical Engineering, and Biomedical Engineering Capstone teams**
 <br><br>
 **Table of Contents:**<br>
 &emsp;\* [Project Overview](#project-overview)<br>
@@ -46,7 +46,7 @@ Device communication with the software can be achieved in two ways:<br>
 Both rely on the device being turned on. With the device on, you must [navigate](#navigation) the visualizer to find the scan button. Once it is pressed, it will connect to the device.<br>
 A successful connection will result in a blinking light on the device, and data being received and plotted on the visualizer.<br>
 >[!IMPORTANT]
->It may take up to 60 seconds before a sleep stage is plotted. This is due to the time it takes to calculate sleep staged. For live feedback, switch to a waveform view.
+>It may take up to 60 seconds before a sleep stage is plotted. This is due to the time it takes to calculate sleep stages. For live feedback, switch to a waveform view.
 ><br>
 
 # T - Tracer
@@ -61,7 +61,7 @@ A successful connection will result in a blinking light on the device, and data 
 ><br>
 ## Installation
 >[!TIP]
-><br>Installation and executed can be achieved quickly with our installer:
+><br>Installation and execution can be achieved quickly with our installer:
 >```
 >NEEDINSTALLERHERE
 >```
@@ -89,11 +89,14 @@ py install 3.14 >> install_log.txt 2>&1
 py -m ensurepip --upgrade
 py -m pip install --upgrade pip
 ```
+
 Use pip to install the additional libaries:<br>
-* PyCryptodome (cryptographic operations)&emsp;`py -m pip install pycryptodome`<br>
-* Flask (frontend-backend communication)&emsp;  `py -m pip install Flask flask-cors`<br>
-* Numpy (EEG information processing)&emsp;&emsp;&emsp;`py -m pip install numpy`<br>
-* Matplotlib (Visualizing)&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;`py -m pip install matplotlib`<br>
+| Package | Use | Command |
+| :--- | :--- | :---|
+| PyCryptodome | Cryptographic Operations | `py -m pip install pycryptodome`|
+| Flask | Frontend-Backend Communication | `py -m pip install Flask flask-cors` |
+| Numpy | EEG Information Processing | `py -m pip install numpy` |
+| Matplotlib | Visualizing | `py -m pip install matplotlib`|<br>
 ### React
 >[!NOTE]
 >Javascript must be installed on your device for this phase. You may be asked to restart your computer.
@@ -112,14 +115,14 @@ call npm audit fix
 ```
 You may move back to the root software directory.
 ### Codebase
-This codebase may be retreived by pulling the [main repository](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main) into your project directory.<br/>
-Congradulations! You have successfully installed the dependencies needed to run DreamRT.
+This codebase may be retrieved by pulling the [main repository](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/tree/main) into your project directory.<br/>
+Congratulations! You have successfully installed the dependencies needed to run DreamRT.
 ## User Accounts
 DreamRT accounts are used to securely access private EEG sessions, and control the visual experience while using the software. Integrity is preserved using a [Galois/Counter Mode](https://en.wikipedia.org/wiki/Galois/Counter_Mode) version of the [Advanced Encryption Standard](https://www.nist.gov/publications/advanced-encryption-standard-aes) (AES) cipher protocol with keys being derived using [Password-Based Key Derivation Function 2](https://en.wikipedia.org/wiki/PBKDF2).
 ### Account Creation
 To create a new account, start the software and select `Create one`. This will create a popup window to create a new account. Enter a username, and a password with a minimum of six (6) characters. Reenter your password to confirm it, and click `Create Account` to create your account. You may then enter your username/password combo in the login screen to begin using your account!
 >[!CAUTION]
->Remember your password. THERE IS NOT PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
+>Remember your password. THERE IS NO PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
 ><br>
 ### User Settings
 <img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_User_Settings.JPG" width="50%"></img><br>

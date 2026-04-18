@@ -1,7 +1,7 @@
 #!/bin/bash
 # EEG App launcher for macOS 
-# First time: chmod +x eeg_app.sh
-# Run from project root: ./eeg_app.sh   
+# First time: chmod +x dreamRT.sh
+# Run from project root: ./dreamRT.sh   
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -35,7 +35,7 @@ elif command -v python &>/dev/null; then
 else
     echo "ERROR: Python is not installed or not in PATH."
     echo "Install from https://www.python.org/ or: brew install python3"
-    echo "Then run: ./eeg_app.sh --install"
+    echo "Then run: ./dreamRT.sh --install"
     exit 1
 fi
 
@@ -43,7 +43,7 @@ fi
 if ! command -v npm &>/dev/null; then
     echo "ERROR: Node.js/npm is not installed or not in PATH."
     echo "Install from https://nodejs.org/ or: brew install node"
-    echo "Then run: ./eeg_app.sh --install"
+    echo "Then run: ./dreamRT.sh --install"
     exit 1
 fi
 

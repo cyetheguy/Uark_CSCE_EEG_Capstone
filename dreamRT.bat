@@ -90,7 +90,7 @@ if %ERRORLEVEL% EQU 0 (
             set PYTHON_CMD=python3
         ) else (
             echo ERROR: Python is not installed or not in PATH.
-            echo Please install Python or run: .\eeg_app.bat --install
+            echo Please install Python or run: .\dreamRT.bat --install
             pause
             exit /b 1
         )
@@ -102,7 +102,7 @@ where npm >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo ERROR: Node.js/npm is not installed or not in PATH.
     echo Please install Node.js from https://nodejs.org/
-    echo Or run: .\eeg_app.bat --install
+    echo Or run: .\dreamRT.bat --install
     pause
     exit /b 1
 )
@@ -117,7 +117,7 @@ if not exist "frontend\node_modules" (
         echo.
         echo ERROR: Failed to install frontend dependencies.
         echo Please check your internet connection and Node.js installation.
-        echo Or run: .\eeg_app.bat --install
+        echo Or run: .\dreamRT.bat --install
         cd ..
         pause
         exit /b 1
