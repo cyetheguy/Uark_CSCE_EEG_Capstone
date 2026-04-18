@@ -6,10 +6,10 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 <br><br>
 **Table of Contents:**<br>
 &emsp;\* [Project Overview](#project-overview)<br>
-&emsp;* [R - Reader](#dreamr)<br>
+&emsp;* [R - Reader](#r---reader)<br>
 &emsp;&emsp;- [Device Setup](#device-setup)<br>
 &emsp;&emsp;- [Device Activation](#device-activation)<br>
-&emsp;\* [T - Tracer](#dreamt)<br>
+&emsp;\* [T - Tracer](#t---tracer)<br>
 &emsp;&emsp;- [Installation](#installation)<br>
 &emsp;&emsp;&emsp;- [Python](#python)<br>
 &emsp;&emsp;&emsp;- [React](#react)<br>
@@ -21,19 +21,24 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 &emsp;&emsp;- [Session Recording](#session-recording)<br>
 &emsp;&emsp;- [Session Review](#session-review)<br>
 &emsp;\* [Contributions](#contributions)<br>
+&emsp;&emsp;- [Computer Science and Computer Engineering](#computer-science-and-computer-engineering)<br>
+&emsp;&emsp;- [Electrical Engineering](#electrical-engineering)<br>
+&emsp;&emsp;- [Biomedical Engineering](#biomedical-engineering)<br>
 
 
 # Project Overview
 Sleep monitoring via electroencephalograms (EEG) is critical for diagnosing and tracking neurological conditions and sleep health. However, traditional EEG systems are often cumbersome and uncomfortable for users due to lengthy setup procedures which involve multiple wired nodes and conductive gels. These elements make current EEG devices disruptive during usage, restricting their effectiveness in being an accessible, long-term method of sleep tracking for consumers. There have been commercial EEG-based sleep trackers; however, the market currently has no ergonomic, sub-$200 EEG for monitoring sleep health in a consumer's home.<br><br> 
-To address this market gap, this project seeks to create a wireless EEG system designed for ease of use, comfort, and portability. The DreamR device will transmit brainwave reading data via Bluetooth Low Energy, enabling real-time monitoring without the constraints of traditional setups. The DreamT software is used to visualize and store the transmitted data privately for each user, allowing them to securely track their personal sleep patterns over time. This software solution aims to provide consumers with tools and resources to utilize this efficient EEG model. Both components provide greater data transparency and control for users, expanding its commercial market.<br>
-# DreamR
+To address this market gap, this project seeks to create a wireless EEG system designed for ease of use, comfort, and portability. Our wireless device will transmit brainwave reading data via Bluetooth Low Energy, enabling real-time monitoring without the constraints of traditional setups. The tracer software is used to visualize and store the transmitted data privately for each user, allowing them to securely track their personal sleep patterns over time. This software solution aims to provide consumers with tools and resources to utilize this efficient EEG model. Both components provide greater data transparency and control for users, expanding its commercial market.<br><br>
+<img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_Architecture_Overview.jpg" width="75%"></img><br><br>
+This project is comprised of two components. The [EEG board](#r---reader) was designed and produced by the [Electrical Engineering Capstone Team](#electrical-engineering). The [Software Tracer](#t---tracer) was developed by the [Computer Science and Computer Engineering Capstone Team](#computer-science-and-computer-engineering). There are four key componets to this project. The user interacts with the EEG board and frontend components to capture and visualize EEG data. The board and frontend communicate with the backend, which processes the received data for visualizing while maintaining integrity and authenticity standards. The local directory database is used to house encrypted files.
+# R - Reader
 ![DreamR Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamR_HORZ_wp.png)
 The DreamRT board is an EEG board<br
 ## Device Setup
 To begin
 ## Device Activation
 Fill me<br>
-# DreamT
+# T - Tracer
 ![DreamT Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamT_HORZ_wp.png)
 The DreamRT project is run locally on a Windows-based PC.
 ## Installation
@@ -99,7 +104,7 @@ To create a new account, start the software and select <ins>Create one</ins>. Th
 >Remember your password. THERE IS NOT PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
 ><br>
 ### User Settings
-![Snippet showing visual and practical settings accessible to the user]()
+<img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_User_Settings.JPG" width="50%"></img>
 Once logged in, you may modify your experience by navigaiting to the <ins>⚙ Settings</ins> button located in the top-right corner of your window. All settings you modify will affect only your account.<br><br>
 The following settings are available to the user:
 * ```Theme``` - Affects full window color scheme
@@ -108,7 +113,7 @@ The following settings are available to the user:
 * ```Export Folder``` - Gives user ability to change directory when exporting sessions
 All settings may be reverted to default by selecting the <ins>Reset to Defaults</ins> button located at the bottom-right of the Sleep Session Settings window.
 ## Navigation
-![Visualization window]()
+<img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_Visualizer_Window.jpg" width="75%"></img><br>
 DreamRT is divided into numerous sections.
 * ```Top Bar``` - Displays username, live/review switch, scan, settings, and logout button
   * ```live/review switch``` - Used to switch between Live Mode and Review Mode
@@ -158,6 +163,7 @@ To review a session, go to Review Sessions.<br>
 The Sleep Sessions section should automatically populate with the sessions you have access to. Select a session to load it (this make take some time).<br>
 A loaded session will remain loaded until a user is logged out.
 # Contributions
+## Computer Science and Computer Engineering
 DreamR firmware and DreamT software was designed and developed by Team 17 of the Uark CSCE Capstone I&II class of 2025-2026. The following are the names and GitHub accounts of each member:<br>
 <br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
 <br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
@@ -166,3 +172,7 @@ DreamR firmware and DreamT software was designed and developed by Team 17 of the
 <br>&emsp;&emsp;William Taylor:&emsp;&emsp;&ensp;&ensp;[@Will-Taylor08](https://github.com/Will-Taylor08)
 <br>&emsp;&emsp;Joey Leder:&emsp;&emsp;&ensp;&ensp;[@JoeyLeder](https://github.com/JoeyLeder)
 <br><br>To view the full graph of CSCE contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
+## Electrical Engineering
+The Electrical Engineering Capstone team was responsible for designing and developing the EEG board.
+## Biomedical Engineering
+The Biomedical Enginerring Capstone team served as scientific experts on electroencephalogram studies.
