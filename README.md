@@ -95,7 +95,7 @@ Use pip to install the additional libaries:<br>
 | :--- | :--- | :---|
 | PyCryptodome | Cryptographic Operations | `py -m pip install pycryptodome`|
 | Flask | Frontend-Backend Communication | `py -m pip install Flask flask-cors` |
-| Numpy | EEG Information Processing | `py -m pip install numpy` |
+| NumPy | EEG Information Processing | `py -m pip install numpy` |
 | Matplotlib | Visualizing | `py -m pip install matplotlib`|<br>
 ### React
 >[!NOTE]
