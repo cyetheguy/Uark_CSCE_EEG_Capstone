@@ -212,6 +212,7 @@ __marimo__/
 node_modules/
 *.usr
 *.eeg
+install_log.txt
 
 # Desktop installer/build artifacts
 frontend/release/

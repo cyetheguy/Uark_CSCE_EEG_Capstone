@@ -30,9 +30,9 @@ Collaboration between Computer Science Computer Engineering, Electrical Engineer
 
 # Project Overview
 Sleep monitoring via electroencephalograms (EEG) is critical for diagnosing and tracking neurological conditions and sleep health. However, traditional EEG systems are often cumbersome and uncomfortable for users due to lengthy setup procedures which involve multiple wired nodes and conductive gels. These elements make current EEG devices disruptive during usage, restricting their effectiveness in being an accessible, long-term method of sleep tracking for consumers. There have been commercial EEG-based sleep trackers; however, the market currently has no ergonomic, sub-$200 EEG for monitoring sleep health in a consumer's home.<br><br> 
-To address this market gap, this project seeks to create a wireless EEG system designed for ease of use, comfort, and portability. Our wireless device will transmit brainwave reading data via Bluetooth Low Energy, enabling real-time monitoring without the constraints of traditional setups. The tracer software is used to visualize and store the transmitted data privately for each user, allowing them to securely track their personal sleep patterns over time. This software solution aims to provide consumers with tools and resources to utilize this efficient EEG model. Both components provide greater data transparency and control for users, expanding its commercial market.<br><br>
+To address this market gap, this project seeks to create a wireless EEG system designed for ease of use, comfort, and portability. Our wireless device will transmit brainwave reading data via [Bluetooth Low Energy](https://en.wikipedia.org/wiki/Bluetooth_Low_Energy) (BLE), enabling real-time monitoring without the constraints of traditional setups. The tracer software is used to visualize and store the transmitted data privately for each user, allowing them to securely track their personal sleep patterns over time. This software solution aims to provide consumers with tools and resources to utilize this efficient EEG model. Both components provide greater data transparency and control for users, expanding its commercial market.<br><br>
 <img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_Architecture_Overview.jpg" width="75%"></img><br><br>
-This project is comprised of two components. The [EEG board](#r---reader) was designed and produced by the [Electrical Engineering Capstone Team](#electrical-engineering). The [Software Tracer](#t---tracer) was developed by the [Computer Science and Computer Engineering Capstone Team](#computer-science-and-computer-engineering). There are four key componets to this project. The user interacts with the EEG board and frontend components to capture and visualize EEG data. The board and frontend communicate with the backend, which processes the received data for visualizing while maintaining integrity and authenticity standards. The local directory database is used to house encrypted files.
+This project is comprised of two components. The [EEG board](#r---reader) was designed and produced by the [Electrical Engineering Capstone Team](#electrical-engineering). The [Software Tracer](#t---tracer) was developed by the [Computer Science and Computer Engineering Capstone Team](#computer-science-and-computer-engineering). There are four key components to this project. The user interacts with the EEG board and frontend components to capture and visualize EEG data. The board and frontend communicate with the backend, which processes the received data for visualizing while maintaining integrity and authenticity standards. The local directory database is used to house encrypted files.
 # R - Reader
 ![DreamR Logo](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamR_HORZ_wp.png)
 ## Device Setup
@@ -68,13 +68,13 @@ A successful connection will result in a blinking light on the device, and data 
 ><br>
 
 >[!TIP]
->This program can be installed and run via a shell script. To utilize this feature, simply run [eeg_app.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/eeg_app.bat)), and move it into a folder.<br>
->With the terminal open, run ```.\eeg_app.bat <flags>```. The ```<flags>``` denotes specific install/update features. (You may double click the script if all dependencies are installed)<br>
->```--install``` installs all depencies listed below<br>
->```--update``` downloads the latest version of the software and moves it into the folder.<br>
+>This program can be installed and run via a shell script. To utilize this feature, simply run [dreamRT.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/dreamRT.bat)), and move it into a folder.<br>
+>With the terminal open, run `.\dreamRT.bat <flags>`. The `<flags>` denotes specific install/update features. (You may double click the script if all dependencies are installed)<br>
+>`--install` installs all dependencies listed below<br>
+>`--update` downloads the latest version of the software and moves it into the folder.<br>
 ><br>
 
-In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from the main GitHub repository.
+In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from source code.
 ### Python
 Python 3.14 is the recommended version of Python to install. This version can be installed by visiting the [Python website](https://www.python.org/) or by entering the following commands:
 ```
@@ -90,16 +90,16 @@ py -m ensurepip --upgrade
 py -m pip install --upgrade pip
 ```
 Use pip to install the additional libaries:<br>
-* PyCryptodome (cryptographic operations)&emsp;```py -m pip install pycryptodome```<br>
-* Flask (frontend-backend communication)&emsp;  ```py -m pip install Flask flask-cors```<br>
-* Numpy (EEG information processing)&emsp;&emsp;&emsp;```py -m pip install numpy```<br>
-* Matplotlib (Visualizing)&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;```py -m pip install matplotlib```<br>
+* PyCryptodome (cryptographic operations)&emsp;`py -m pip install pycryptodome`<br>
+* Flask (frontend-backend communication)&emsp;  `py -m pip install Flask flask-cors`<br>
+* Numpy (EEG information processing)&emsp;&emsp;&emsp;`py -m pip install numpy`<br>
+* Matplotlib (Visualizing)&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;`py -m pip install matplotlib`<br>
 ### React
 >[!NOTE]
 >Javascript must be installed on your device for this phase. You may be asked to restart your computer.
 ><br>
 
-To install the React framework, we must install Node.js:
+To install the [React](https://react.dev/) framework, we must install Node.js:
 ```
 nvm install latest
 ```
@@ -117,64 +117,64 @@ Congradulations! You have successfully installed the dependencies needed to run 
 ## User Accounts
 DreamRT accounts are used to securely access private EEG sessions, and control the visual experience while using the software. Integrity is preserved using a [Galois/Counter Mode](https://en.wikipedia.org/wiki/Galois/Counter_Mode) version of the [Advanced Encryption Standard](https://www.nist.gov/publications/advanced-encryption-standard-aes) (AES) cipher protocol with keys being derived using [Password-Based Key Derivation Function 2](https://en.wikipedia.org/wiki/PBKDF2).
 ### Account Creation
-To create a new account, start the software and select <ins>Create one</ins>. This will create a popup window to create a new account. Enter a username, and a password with a minimum of six (6) characters. Reenter your password to confirm it, and click <ins>Create Account</ins> to create your account. You may then enter your username/password combo in the login screen to begin using your account!
+To create a new account, start the software and select `Create one`. This will create a popup window to create a new account. Enter a username, and a password with a minimum of six (6) characters. Reenter your password to confirm it, and click `Create Account` to create your account. You may then enter your username/password combo in the login screen to begin using your account!
 >[!CAUTION]
 >Remember your password. THERE IS NOT PASSWORD RESET!!! If you cannot access your account, all sessions saved to that account will be lost. Passwords cannot be retrieved.
 ><br>
 ### User Settings
 <img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_User_Settings.JPG" width="50%"></img><br>
-Once logged in, you may modify your experience by navigaiting to the <ins>⚙ Settings</ins> button located in the top-right corner of your window. All settings you modify will affect only your account.<br><br>
+Once logged in, you may modify your experience by navigating to the `⚙ Settings` button located in the top-right corner of your window. All settings you modify will affect only your account.<br><br>
 The following settings are available to the user:
-* ```Theme``` - Affects full window color scheme
-* ```Show Sleep Stages``` - Toggles visibility of current sleep stage
-* ```Sleep Stage Colors``` - Allows custom RGB values for Wake, Light, Deep, and REM sleep stages
-* ```Export Folder``` - Gives user ability to change directory when exporting sessions
-All settings may be reverted to default by selecting the <ins>Reset to Defaults</ins> button located at the bottom-right of the Sleep Session Settings window.
+* `Theme` - Affects full window color scheme
+* `Show Sleep Stages` - Toggles visibility of current sleep stage
+* `Sleep Stage Colors` - Allows custom RGB values for Wake, Light, Deep, and REM sleep stages
+* `Export Folder` - Gives user ability to change directory when exporting sessions
+All settings may be reverted to default by selecting the `Reset to Defaults` button located at the bottom-right of the Sleep Session Settings window.
 ## Navigation
 <img src="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/media/DreamRT_Visualizer_Window.jpg" width="75%"></img><br>
 DreamRT is divided into numerous sections.
-* ```Top Bar``` - Displays username, live/review switch, scan, settings, and logout button
-  * ```live/review switch``` - Used to switch between Live Mode and Review Mode
-  * ```🔍 Scan``` - Used to scan and connect to the DreamRT board
-  * ```⚙ Settings``` - Used to access [user settings](#user-settings)
-  * ```Logout``` - Logs user out of software, and returns to login screen
-* ```EEG & Hypnogram``` - Visual window for EEG data
-  * ```Show EEG waveform``` - Toggle between hypnogram and waveform
-  * ```Window``` - Shows EEG data either as sleep stage (hypnogram) or amplitude (waveform)
-  * ```Window slider``` - Enables user to navigate a session in 60 sample segments
-* ```Sleep summary``` - Lists global data summary estimations for a given session (live or past)
-  * ```Recording duration``` - Total length of session
-  * ```Sleep efficiency index``` - Percentage of time spent asleep
-  * ```Est. sleep cycles``` - Estimated number of sleep cycles captured during session
-  * ```Wake``` - Known time user was awake
-  * ```N1/N2 (Light)``` - Estimated time user spent in light sleep
-  * ```N3 (Deep``` - Estimated time user spent in deep sleep
-  * ```REM``` - Known time user was in REM sleep
-* ```Sleep Status```(Live Only) - Provides brief technical summary of current session
-  * ```Samples``` - Number of EEG channel samples collected this session
-  * ```Duration``` - Elapsed time since session start
-  * ```Clear Live Data``` - Erases all data in current session
-* ```Acquisition status``` - Gives live updates on device
-  * ```Data source``` - Where data is coming from (usually BLE)
-  * ```Sampling rate``` - How fast samples are being received
-  * ```Samples acquired``` - How many samples have been acquired
-  * ```Recording duration``` - Elapsed time of sample capture
-  * ```Save encrypted sleep session``` - Saves current session in ```sessions``` folder
-  * ```Export CSV``` - Exports current session in folder chosen by user
-* ```Sleep Sessions```(Review Only) - Lists sessions associated with account
-  * ```🔄 Refresh``` - Sends request and populates with all visible sessions accessible by account
-  * ```YYYY-MM-DD``` - Denotes session user can access
-* ```Loaded file details```(Review Only) - Global information regarding selected session
-  * ```File name``` - Name of file holding session
-  * ```Device``` - Name of device used to capture session
-  * ```Samples loaded``` - Number of samples in session
-  * ```Recording duration``` - Time session was being recorded
+* `Top Bar` - Displays username, live/review switch, scan, settings, and logout button
+  * `live/review switch` - Used to switch between Live Mode and Review Mode
+  * `🔍 Scan` - Used to scan and connect to the DreamRT board
+  * `⚙ Settings` - Used to access user settings
+  * `Logout` - Logs user out of software, and returns to login screen
+* `EEG & Hypnogram` - Visual window for EEG data
+  * `Show EEG waveform` - Toggle between hypnogram and waveform
+  * `Window` - Shows EEG data either as sleep stage (hypnogram) or amplitude (waveform)
+  * `Window slider` - Enables user to navigate a session in 60 sample segments
+* `Sleep summary` - Lists global data summary estimations for a given session (live or past)
+  * `Recording duration` - Total length of session
+  * `Sleep efficiency index` - Percentage of time spent asleep
+  * `Est. sleep cycles` - Estimated number of sleep cycles captured during session
+  * `Wake` - Known time user was awake
+  * `N1/N2 (Light)` - Estimated time user spent in light sleep
+  * `N3 Deep` - Estimated time user spent in deep sleep
+  * `REM` - Known time user was in REM sleep
+* `Sleep Status`(Live Only) - Provides brief technical summary of current session
+  * `Samples` - Number of EEG channel samples collected this session (readings of your brainwaves)
+  * `Duration` - Elapsed time since session start
+  * `Clear Live Data` - Erases all data in current session
+* `Acquisition status` - Gives live updates on device
+  * `Data source` - Where data is coming from (usually BLE)
+  * `Sampling rate` - How fast samples are being received (how many readings the device takes per second)
+  * `Samples acquired` - How many samples have been acquired
+  * `Recording duration` - Elapsed time of sample capture
+  * `Save encrypted sleep session` - Saves current session in `sessions` folder
+  * `Export CSV` - Exports current session as an unencrypted Comma-Separated Values (CSV) file in folder chosen by user
+* `Sleep Sessions`(Review Only) - Lists sessions associated with account
+  * `🔄 Refresh` - Sends request and populates with all visible sessions accessible by account
+  * `YYYY-MM-DD` - Denotes session user can access
+* `Loaded file details`(Review Only) - Global information regarding selected session
+  * `File name` - Name of file holding session
+  * `Device` - Name of device used to capture session
+  * `Samples loaded` - Number of samples in session
+  * `Recording duration` - Time session was being recorded
 ## Session Recording
 To record a session, go to Live Mode and scan for a device. The session begins automatically once the device is connected and data is being received.<br><br>
 Once you have finished your session, choose to save or export your session.
 >[!IMPORTANT]
->```SAVE``` - Encrypted EEG session. Only the account that saved the session can access can view it.<br>
->```EXPORT``` - Unencrypted EEG session. Use when you want to move your session outside DreamRT.
+>`SAVE` - Encrypted EEG session. Only the account that saved the session can access can view it.<br>
+>`EXPORT` - Unencrypted EEG session. Use when you want to move your session outside DreamRT.
 ><br>
 ## Session Review
 To review a session, go to Review Sessions.<br>
@@ -186,18 +186,22 @@ A loaded session will remain loaded until a user is logged out.
 >Compromising risks arise with debug mode enabled.
 ><br>
 
-As part of its development, the Computer Science and Computer Engineering team developed a debug mode into the DreamRT software. To enable this debug feature, use the flag ```--debug``` on startup.<br>
+As part of its development, the Computer Science and Computer Engineering team developed a debug mode into the DreamRT software. To enable this debug feature, use the flag `--debug` on startup.<br>
 Debug mode outputs messages inside the terminal. These messages can be used to help verify client-server communication, user interaction, device connection and pairing, as well as file management.<br>
 # Contributions
 ## Computer Science and Computer Engineering
 DreamR firmware and DreamT software was designed and developed by Team 17 of the Uark CSCE Capstone I&II class of 2025-2026. The following are the names and GitHub accounts of each member:<br>
-<br>&emsp;&emsp;Joseph Umuhoza:&emsp;&nbsp;[@Sahunkuy](https://github.com/Sahunkuy)
-<br>&emsp;&emsp;Caleb Young:&emsp;&emsp;&emsp;[&nbsp;@cyetheguy](https://github.com/cyetheguy)
-<br>&emsp;&emsp;Charles Williams:&emsp;&ensp;[@Putter-64](https://github.com/Putter-64)
-<br>&emsp;&emsp;Dylan Wilkins:&emsp;&emsp;&ensp;&ensp;[@DJW032](https://github.com/DJW032)
-<br>&emsp;&emsp;William Taylor:&emsp;&emsp;&ensp;&ensp;[@Will-Taylor08](https://github.com/Will-Taylor08)
-<br>&emsp;&emsp;Joey Leder:&emsp;&emsp;&ensp;&ensp;[@JoeyLeder](https://github.com/JoeyLeder)
-<br><br>To view the full graph of CSCE contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
+
+| Name | GitHub Account |
+| :--- | :--- |
+| Joey Leder | [@JoeyLeder](https://github.com/JoeyLeder) |
+| William Taylor | [@Will-Taylor08](https://github.com/Will-Taylor08) |
+| Joseph Umuhoza | [@Sahunkuy](https://github.com/Sahunkuy) |
+| Dylan Wilkins | [@DJW032](https://github.com/DJW032) |
+| Charles Williams | [@Putter-64](https://github.com/Putter-64) |
+| Caleb Young | [@cyetheguy](https://github.com/cyetheguy) |
+
+To view the full graph of CSCE contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
 ## Electrical Engineering
 The Electrical Engineering Capstone team was responsible for designing and developing the EEG board.
 ## Biomedical Engineering
