@@ -60,21 +60,40 @@ A successful connection will result in a blinking light on the device, and data 
 >Using the install script, network access to this software is possible. This is unofficial and may produce glitches and other unseen errors.
 ><br>
 ## Installation
->[!TIP]
-><br>Installation and execution can be achieved quickly with our installer:
->```
->NEEDINSTALLERHERE
->```
-><br>
+
+### For end users (recommended)
+
+Download the latest `DreamRT Setup <version>.exe` from the project's Releases page, double-click it, and follow the install wizard. The installer will:
+
+* Copy a self-contained copy of DreamRT into `Program Files` (or the folder you choose),
+* Create a **DreamRT** shortcut on your desktop and in the Start Menu,
+* Bundle everything the app needs - Python, Node, and the BLE communication service are all included inside the installer.
+
+You **do not** need to install Python, Node.js, `pip`, `npm`, or anything else. Launching DreamRT from the desktop shortcut opens the app window directly; the backend runs silently in the background.
+
+>[!NOTE]
+>Because the installer is not code-signed, Windows SmartScreen may show a "Windows protected your PC" prompt the first time you run it. Click **More info > Run anyway** to continue.
+
+### For developers: producing the installer from source
+
+From a freshly-cloned repo on a Windows 10/11 machine with Python 3.10+ and Node.js 18+ on PATH:
+
+```
+.\build-installer.bat
+```
+
+The script will self-elevate (UAC prompt) because `electron-builder` needs admin to extract its signing toolchain, then it will:
+
+1. `npm install` in `frontend/`,
+2. freeze the Python backend to `dreamrt-backend.exe` via PyInstaller (so end users do not need Python),
+3. build the Vite frontend,
+4. package everything into a single NSIS `setup.exe` under `frontend/release-oneclick/`.
 
 >[!TIP]
->This program can be installed and run via a shell script. To utilize this feature, simply run [dreamRT.bat]((https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/dreamRT.bat)), and move it into a folder.<br>
->With the terminal open, run `.\dreamRT.bat <flags>`. The `<flags>` denotes specific install/update features. (You may double click the script if all dependencies are installed)<br>
->`--install` installs all dependencies listed below<br>
->`--update` downloads the latest version of the software and moves it into the folder.<br>
+>An alternative source-install workflow is available via [dreamRT.bat](https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/blob/main/dreamRT.bat), which installs Python / Node / dependencies in-place and runs the app from source. Use this for active development; use `build-installer.bat` to produce a distributable.
 ><br>
 
-In order for proper installation, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from source code.
+In order to build from source, this project requires Python (and external libraries), and the React framework. This section covers the steps required to properly install this software from source code.
 ### Python
 Python 3.14 is the recommended version of Python to install. This version can be installed by visiting the [Python website](https://www.python.org/) or by entering the following commands:
 ```

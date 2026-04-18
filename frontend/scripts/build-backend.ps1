@@ -24,11 +24,18 @@ try {
     --noconfirm `
     --clean `
     --onedir `
+    --noconsole `
     --name dreamrt-backend `
     --distpath "$distDir" `
     --workpath "$workDir" `
     --specpath "$specDir" `
     --paths "$backendDir" `
+    --collect-all matplotlib `
+    --collect-all numpy `
+    --collect-all Crypto `
+    --hidden-import flask_cors `
+    --hidden-import flask `
+    --hidden-import werkzeug `
     --add-data "$backendDir\sessions;sessions" `
     --add-data "$backendDir\user;user" `
     --add-data "$backendDir\CommunicationManager;CommunicationManager" `

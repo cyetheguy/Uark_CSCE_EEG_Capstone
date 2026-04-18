@@ -1,7 +1,8 @@
 {
-  "name": "eeg-data-viewer",
+  "name": "dreamrt",
+  "productName": "DreamRT",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -15,8 +16,8 @@
     "preview": "vite preview"
   },
   "build": {
-    "appId": "com.uark.eegdataviewer",
-    "productName": "EEG Data Viewer",
+    "appId": "com.uark.dreamrt",
+    "productName": "DreamRT",
     "directories": {
       "output": "release-oneclick"
     },

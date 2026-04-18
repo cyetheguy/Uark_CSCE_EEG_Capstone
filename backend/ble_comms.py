@@ -1,5 +1,6 @@
 import re
 import subprocess
+import sys
 import threading
 import time
 import json
@@ -9,6 +10,12 @@ from typing import Tuple, List, Optional, Dict, Any, Generator, Sequence
 
 from debug import getDebug
 from runtime_paths import get_backend_root
+
+# On Windows, ensure subprocesses spawned by the (windowless) backend do not
+# create a visible console. Without this, packaging the backend with
+# PyInstaller --noconsole still leaves child .exe processes flashing a cmd
+# window when Flask launches them.
+_WIN_NO_WINDOW_FLAGS: int = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 BLUETOOTH_HEX_MAX_LINES: int = 500
 BLUETOOTH_SAMPLES_MAX: int = 100_000
@@ -166,6 +173,7 @@ def launch_desktop_client() -> bool:
                 cwd=str(DESKTOP_EXE.parent),
                 text=True,
                 bufsize=1,
+                creationflags=_WIN_NO_WINDOW_FLAGS,
             )
             t: threading.Thread = threading.Thread(target=_drain_desktop_stdout, args=(_desktop_proc,), daemon=True)
             t.start()

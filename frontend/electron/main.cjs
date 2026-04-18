@@ -46,17 +46,15 @@ function startBackend() {
       cwd: backendRoot,
       env: {
         ...process.env,
-        DREAMRT_BACKEND_ROOT: backendRoot,
+        // Deliberately do NOT set DREAMRT_BACKEND_ROOT in packaged mode:
+        // the frozen backend locates its bundled resources via PyInstaller's
+        // `sys._MEIPASS`, which points inside `_internal/`. Overriding the
+        // root here would break paths like CommunicationManager/main.exe.
         DREAMRT_BACKEND_DATA_DIR: backendDataDir,
       },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    backendProcess.stdout.on("data", (chunk) => {
-      process.stdout.write(`[backend] ${chunk}`);
-    });
-    backendProcess.stderr.on("data", (chunk) => {
-      process.stderr.write(`[backend] ${chunk}`);
+      stdio: "ignore",
+      windowsHide: true,
+      detached: false,
     });
     return;
   }

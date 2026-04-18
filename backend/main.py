@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import sys
 import json
 import time
@@ -15,6 +16,31 @@ import crypto_ops
 import ble_comms
 import data_processor
 from runtime_paths import get_backend_data_root, ensure_runtime_data_dirs
+
+
+def _redirect_frozen_streams() -> None:
+    """When packaged with PyInstaller --noconsole, stdout/stderr may be None
+    (or backed by an invalid handle), causing any `print(...)` to raise
+    OSError and kill the backend before Flask binds. Route them to a
+    log file inside the writable data dir so the app stays alive and we
+    still have a breadcrumb when something goes wrong.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        log_dir = get_backend_data_root()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "backend.log"
+        log_file = open(log_path, "a", buffering=1, encoding="utf-8")
+        sys.stdout = log_file
+        sys.stderr = log_file
+    except Exception:
+        devnull = open(os.devnull, "w", encoding="utf-8")
+        sys.stdout = devnull
+        sys.stderr = devnull
+
+
+_redirect_frozen_streams()
 
 app: Flask = Flask(__name__)
 CORS(app)
