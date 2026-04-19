@@ -12,7 +12,6 @@ interface SessionPanelProps {
   onLoadSession: (sessionId: string) => void;
   onLoadDemoData: () => void;
   onFetchSessionList: () => void;
-  onGenerateDemoSessionList: () => void;
   onClearData: () => void;
 }
 
@@ -27,7 +26,6 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
   onLoadSession,
   onLoadDemoData,
   onFetchSessionList,
-  onGenerateDemoSessionList,
   onClearData
 }) => {
   const shouldExpandReviewPanel = mode === 'review' && selectedSession === null;
@@ -109,13 +107,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({
               </>
             ) : (
               <div className="no-sessions">
-                <p>No sleep sessions available on server.</p>
-                <button 
-                  onClick={onGenerateDemoSessionList}
-                  className="load-demo-button"
-                >
-                  Load Demo Session List
-                </button>
+                <p>No sleep sessions in sessions folder.</p>
               </div>
             )}
           </div>

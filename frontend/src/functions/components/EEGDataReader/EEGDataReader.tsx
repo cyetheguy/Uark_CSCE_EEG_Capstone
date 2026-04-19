@@ -142,11 +142,6 @@ const EEGDataReader: React.FC = () => {
     updates.addUpdate('Refreshing session list from server');
   };
 
-  const handleGenerateDemoSessionList = () => {
-    sleepData.generateDemoSessionList();
-    updates.addUpdate('Generated demo session list');
-  };
-
   const handleUpdateSetting = (key: keyof typeof settings.settings, value: any) => {
     settings.updateSetting(key, value);
     updates.addUpdate(`Setting updated: ${key} = ${value}`);
@@ -395,7 +390,6 @@ const EEGDataReader: React.FC = () => {
                   onLoadSession={handleLoadSession}
                   onLoadDemoData={handleLoadDemoData}
                   onFetchSessionList={handleFetchSessionList}
-                  onGenerateDemoSessionList={handleGenerateDemoSessionList}
                   onClearData={handleClearData}
                 />
               )}

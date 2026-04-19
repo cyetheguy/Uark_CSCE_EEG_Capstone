@@ -165,23 +165,6 @@ export const useSleepData = () => {
     }, 1000);
   }, [generateMockSleepStages]);
 
-  const generateDemoSessionList = useCallback(() => {
-     const demoList: SessionMetadata[] = [];
-     const now = new Date();
-     for (let i = 0; i < 5; i++) {
-       const d = new Date(now); d.setDate(d.getDate() - i);
-       demoList.push({
-         id: `demo_session_${i}`,
-         startTime: new Date().toISOString(),
-         endTime: new Date().toISOString(),
-         deviceId: 'EEG_Device',
-         date: d.toLocaleDateString(),
-         hourRange: '10PM - 6AM'
-       });
-     }
-     setSessionList(demoList);
-  }, []);
-
   const isStreamActive = useCallback((): boolean => {
     return edfEventSourceRef.current !== null && edfEventSourceRef.current.readyState !== EventSource.CLOSED;
   }, []);
@@ -544,7 +527,6 @@ export const useSleepData = () => {
     setSelectedSession,
     setSleepSessions,
     loadDemoSleepData,
-    generateDemoSessionList,
     loadEDFPlot,
     fetchSessionList,
     loadSessionData,
