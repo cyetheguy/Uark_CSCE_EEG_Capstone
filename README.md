@@ -225,6 +225,6 @@ DreamR firmware and DreamT software was designed and developed by Team 17 of the
 
 To view the full graph of CSCE contribution, visit <a href="https://github.com/cyetheguy/Uark_CSCE_EEG_Capstone/graphs/contributors">here</a>.
 ## Electrical Engineering
-The Electrical Engineering Capstone team was responsible for designing and developing the EEG board.
+The Electrical Engineering Capstone team comprised of Abhinav Komanduri (team lead), Ethan Jones, Manuel Martinez, and Chloe Harris, was responsible for designing and developing the EEG board.
 ## Biomedical Engineering
-The Biomedical Enginerring Capstone team served as scientific experts on electroencephalogram studies.
+The Biomedical Enginerring Capstone team comprised of Isabella McGill (team lead), Yasiel Velasquez, Jacob Yasin, Brian Romero, and Faith Milligan, served as scientific experts on electroencephalogram studies.
