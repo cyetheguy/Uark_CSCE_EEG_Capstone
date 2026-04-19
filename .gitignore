@@ -222,3 +222,6 @@ frontend/build/backend-work/
 frontend/build/backend-spec/
 frontend/*.exe.blockmap
 frontend/*.tsbuildinfo
+
+# Demo EDF Files
+*.edf
