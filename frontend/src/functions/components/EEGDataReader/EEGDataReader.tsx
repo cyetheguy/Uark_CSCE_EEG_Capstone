@@ -375,7 +375,6 @@ const EEGDataReader: React.FC = () => {
               {mode === 'live' ? (
                 <SleepStatusPanel
                   selectedSession={sleepData.selectedSession}
-                  getSleepStageAtTime={sleepData.getSleepStageAtTime}
                   onClearData={handleClearData}
                 />
               ) : (

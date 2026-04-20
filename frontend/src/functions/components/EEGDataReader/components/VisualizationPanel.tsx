@@ -4,6 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, 
   CartesianGrid, ComposedChart, ReferenceArea 
 } from 'recharts';
+import SleepStageHealthModal from './SleepStageHealthModal';
 
 interface VisualizationPanelProps {
   selectedSession: SleepSessionData | null;
@@ -57,6 +58,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
   const [isHovering, setIsHovering] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [manualScrollIndex, setManualScrollIndex] = useState<number>(0);
+  const [stageHealthModalOpen, setStageHealthModalOpen] = useState(false);
 
   const LIVE_WINDOW_SAMPLES = 60;
   const currentDataLength = selectedSession?.channelData.length || 0;
@@ -153,6 +155,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     : 'calibrating';
 
   return (
+    <>
     <div className="visualization-panel">
       <div className="panel-header">
         <h2>EEG & Hypnogram</h2>
@@ -165,6 +168,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
             />
             Show EEG waveform
           </label>
+          {settings.showSleepStages && (
+            <button
+              type="button"
+              className="stage-health-modal-open"
+              onClick={() => setStageHealthModalOpen(true)}
+            >
+              Stages & health
+            </button>
+          )}
         </div>
       </div>
       
@@ -533,6 +545,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
         )}
       </div>
     </div>
+    <SleepStageHealthModal open={stageHealthModalOpen} onClose={() => setStageHealthModalOpen(false)} />
+    </>
   );
 };
 

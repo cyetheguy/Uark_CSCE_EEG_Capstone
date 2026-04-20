@@ -1,9 +1,9 @@
 import React from 'react';
 import { SleepSessionData } from '../types';
+import { CURRENT_STAGE_HINT } from '../utils/stageInterpretationCopy';
 
 interface SleepStatusPanelProps {
   selectedSession: SleepSessionData | null;
-  getSleepStageAtTime: (stages: any[], time: Date) => string;
   onClearData: () => void;
 }
 
@@ -34,6 +34,8 @@ const SleepStatusPanel: React.FC<SleepStatusPanelProps> = ({
   })();
 
   const rank = STAGE_RANK[currentStage] ?? STAGE_RANK.awake;
+  const stageHint =
+    CURRENT_STAGE_HINT[currentStage] ?? CURRENT_STAGE_HINT.awake;
 
   return (
     <div className="session-panel sleep-status-panel">
@@ -51,6 +53,7 @@ const SleepStatusPanel: React.FC<SleepStatusPanelProps> = ({
           <div className="sleep-status-score">
             {currentStage === 'calibrating' ? 'Warming up...' : `Rank score: ${rank.score}/4`}
           </div>
+          <p className="sleep-status-stage-hint">{stageHint}</p>
           <div className="sleep-status-meta">
             <span>Samples: {sampleCount.toLocaleString()}</span>
             <span>Duration: {recordingMinutes.toFixed(2)} min</span>
