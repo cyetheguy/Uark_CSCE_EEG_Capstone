@@ -108,6 +108,16 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     return data;
   }, [selectedSession, startIndex, endIndex, windowSize, currentDataLength, getSleepStageAtTime]);
 
+  /** Stage at the right edge of the visible window (updates when scrubbing in review mode). */
+  const currentStage = useMemo(() => {
+    const stages = selectedSession?.sleepStages;
+    if (!selectedSession || currentDataLength === 0 || !stages?.length) return 'calibrating';
+    const idx = Math.min(Math.max(0, endIndex), currentDataLength - 1, selectedSession.timestamps.length - 1);
+    const ts = selectedSession.timestamps[idx];
+    if (!ts) return 'calibrating';
+    return getSleepStageAtTime(stages, ts);
+  }, [selectedSession, currentDataLength, endIndex, getSleepStageAtTime]);
+
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     const safeVal = Math.min(val, currentDataLength - 1);
@@ -146,13 +156,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
     );
   }
 
-  // Current stage reflects the last *committed* epoch from the append-only sleepStages array,
-  // not the per-sample lookup. This keeps it stable (matches the hypnogram exactly) and
-  // prevents flicker as new samples stream in.
   const hasCommittedStages = (selectedSession.sleepStages?.length ?? 0) > 0;
-  const currentStage = hasCommittedStages
-    ? selectedSession.sleepStages[selectedSession.sleepStages.length - 1].type
-    : 'calibrating';
 
   return (
     <>
