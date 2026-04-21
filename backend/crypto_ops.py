@@ -130,7 +130,7 @@ def create_usr_file(username: str, password: str) -> bool:
     key: bytes = derive_key(password, salt)
     
     # Encrypt username and info
-    data: bytes = json.dumps({"username": username, "bio": "Top Secret Data"}).encode('utf-8')
+    data: bytes = json.dumps({"username": username}).encode('utf-8')
     cipher = AES.new(key, AES.MODE_GCM)
     nonce: bytes = cipher.nonce
     ciphertext, tag = cipher.encrypt_and_digest(data)
