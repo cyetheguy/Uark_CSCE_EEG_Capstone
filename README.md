@@ -39,8 +39,7 @@ This project is comprised of two components. The [EEG board](#r---reader) was de
 Device setup is simple and straightforward. Ensure battery is charged, and nodes are clean. Place device on user's head. It should sit comfortably.<br>
 Correct device orientation has two nodes above the eyes.
 ## Preparing for Session
-Device communication with the software can be achieved in two ways:<br>
-* BLE (preferred)
+Device communication with the software can be achieved in by means of BLE<br>
 
 This relies on the device being turned on. With the device on, you must [navigate](#navigation) the visualizer to find the scan button. Once it is pressed, it will connect to the device.<br>
 A successful connection will result in a blinking light on the device, and data being received and plotted on the visualizer.<br>
