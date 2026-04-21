@@ -41,9 +41,8 @@ Correct device orientation has two nodes above the eyes.
 ## Preparing for Session
 Device communication with the software can be achieved in two ways:<br>
 * BLE (preferred)
-* USB-C cable
 
-Both rely on the device being turned on. With the device on, you must [navigate](#navigation) the visualizer to find the scan button. Once it is pressed, it will connect to the device.<br>
+This relies on the device being turned on. With the device on, you must [navigate](#navigation) the visualizer to find the scan button. Once it is pressed, it will connect to the device.<br>
 A successful connection will result in a blinking light on the device, and data being received and plotted on the visualizer.<br>
 >[!IMPORTANT]
 >It may take up to 60 seconds before a sleep stage is plotted. This is due to the time it takes to calculate sleep stages. For live feedback, switch to a waveform view.
