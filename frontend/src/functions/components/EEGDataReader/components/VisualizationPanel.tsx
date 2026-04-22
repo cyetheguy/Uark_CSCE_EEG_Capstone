@@ -5,6 +5,7 @@ import {
   CartesianGrid, ComposedChart, ReferenceArea 
 } from 'recharts';
 import SleepStageHealthModal from './SleepStageHealthModal';
+import { clipEEGForDisplay } from '../utils/clipEEG';
 
 interface VisualizationPanelProps {
   selectedSession: SleepSessionData | null;
@@ -52,7 +53,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
   onSelectedSleepStageChange,
   getChartData
 }) => {
-  const [hoverData, setHoverData] = useState<{ value: number; time: string; stage: string } | null>(null);
+  const [hoverData, setHoverData] = useState<{ value: number | null; time: string; stage: string } | null>(null);
   
   // Split interaction into hovering (temporary) and scrubbing/paused (persistent)
   const [isHovering, setIsHovering] = useState(false);
@@ -87,7 +88,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
 
     const sliceData = selectedSession.channelData.slice(startIndex, endIndex + 1);
     const sliceTimestamps = selectedSession.timestamps.slice(startIndex, endIndex + 1);
-    const data: Array<{ index: number; value: number; stage: string; stageLevel: number; timeStr: string }> = [];
+    const data: Array<{ index: number; value: number | null; stage: string; stageLevel: number; timeStr: string }> = [];
 
     for (let i = 0; i < sliceData.length; i++) {
       const ts = sliceTimestamps[i];
@@ -96,7 +97,9 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
 
       data.push({
         index: startIndex + i,
-        value: sliceData[i][0],
+        // Display-only clip: out-of-range samples (|v| > EEG_MAX_ABS_UV) become
+        // null so Recharts renders a gap and the Y-axis stays sensibly scaled.
+        value: clipEEGForDisplay(sliceData[i][0]),
         stage,
         stageLevel,
         timeStr: ts.toLocaleTimeString('en-US', {
@@ -213,7 +216,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                          <span className="graph-tooltip-time">{hoverData.time}</span>
                          {showRawData ? (
                            <span className="graph-tooltip-value">
-                             Amplitude: {hoverData.value.toFixed(2)} µV
+                             Amplitude: {hoverData.value === null ? '—' : `${hoverData.value.toFixed(2)} µV`}
                            </span>
                          ) : (
                            (() => {
@@ -279,7 +282,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                           color: 'var(--text-primary)'
                         }}
                         labelStyle={{ color: 'var(--text-secondary)' }}
-                        formatter={(value: any) => [`${Number(value).toFixed(2)} µV`, 'Amplitude']}
+                        formatter={(value: any) => [value == null || !Number.isFinite(Number(value)) ? '— (clipped)' : `${Number(value).toFixed(2)} µV`, 'Amplitude']}
                         labelFormatter={(label: any) => `Time: ${label}`}
                       />
                       <Line 
@@ -288,7 +291,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         stroke="#63b3ed" 
                         strokeWidth={1.5} 
                         dot={false} 
-                        isAnimationActive={false} 
+                        isAnimationActive={false}
+                        connectNulls
                       />
                     </LineChart>
                   ) : (
@@ -355,7 +359,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         dot={false}
                         activeDot={{ r: 4, fill: 'var(--text-primary)', stroke: 'var(--bg-primary)', strokeWidth: 1 }}
                         isAnimationActive={false}
-                        connectNulls={false}
+                        connectNulls
                       />
                     </ComposedChart>
                   )}
@@ -389,7 +393,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         <span className="graph-tooltip-time">{hoverData.time}</span>
                         {showRawData ? (
                           <span className="graph-tooltip-value">
-                            Amplitude: {hoverData.value.toFixed(2)} µV
+                            Amplitude: {hoverData.value === null ? '—' : `${hoverData.value.toFixed(2)} µV`}
                           </span>
                         ) : (
                           (() => {
@@ -454,7 +458,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                           color: 'var(--text-primary)'
                         }}
                         labelStyle={{ color: 'var(--text-secondary)' }}
-                        formatter={(value: any) => [`${Number(value).toFixed(2)} µV`, 'Amplitude']}
+                        formatter={(value: any) => [value == null || !Number.isFinite(Number(value)) ? '— (clipped)' : `${Number(value).toFixed(2)} µV`, 'Amplitude']}
                         labelFormatter={(label: any) => `Time: ${label}`}
                       />
                       <Line
@@ -464,6 +468,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({
                         strokeWidth={1.5}
                         dot={false}
                         isAnimationActive={false}
+                        connectNulls={false}
                       />
                     </LineChart>
                   ) : (

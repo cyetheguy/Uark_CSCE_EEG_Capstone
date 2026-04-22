@@ -47,7 +47,8 @@ export interface SleepStats {
 
 export interface ChartDataPoint {
   timestamp: Date;
-  value: number;
+  /** Null when the sample was clipped for display (|v| > EEG_MAX_ABS_UV). */
+  value: number | null;
   channel: number;
   deviceId: string;
   quality: string;

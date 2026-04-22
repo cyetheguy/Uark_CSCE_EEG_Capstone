@@ -13,6 +13,7 @@ import {
   Area,
   AreaChart
 } from 'recharts';
+import { clipEEGForDisplay } from '../utils/clipEEG';
 
 interface SleepStage {
   type: 'awake' | 'light' | 'deep' | 'rem';
@@ -23,7 +24,8 @@ interface SleepStage {
 
 interface EEGChartData {
   timestamp: Date;
-  value: number;
+  /** Null for samples clipped by `clipEEGForDisplay` (out-of-range artifacts). */
+  value: number | null;
   channel: number;
   deviceId: string;
   quality: string;
@@ -73,13 +75,15 @@ const EEGChart: React.FC<EEGChartProps> = ({
     );
   }
 
-  // Format data for Recharts (elapsed time in hours for x-axis)
+  // Format data for Recharts (elapsed time in hours for x-axis).
+  // Out-of-range samples are nulled so Recharts skips them, and the Y-axis /
+  // Min-Avg-Max stats below are computed only over the valid (in-range) values.
   const chartData = data.map(d => ({
     time: d.timestamp,
     hours: (d.timestamp.getTime() - data[0].timestamp.getTime()) / (60 * 60 * 1000),
     elapsedSec: (d.timestamp.getTime() - data[0].timestamp.getTime()) / 1000,
     timestampStr: d.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-    value: d.value,
+    value: clipEEGForDisplay(d.value),
     sleepStage: d.sleepStage,
     quality: d.quality,
     deviceId: d.deviceId
@@ -87,12 +91,17 @@ const EEGChart: React.FC<EEGChartProps> = ({
 
   const is1SamplePerSec = data.length >= 2 && Math.abs((data[1].timestamp.getTime() - data[0].timestamp.getTime()) - 1000) < 500;
 
-  // Calculate statistics for entire sleep session
-  const values = chartData.map(d => d.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  const std = Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - avg, 2), 0) / values.length);
+  // Calculate statistics for entire sleep session (skip clipped/null samples).
+  const values = chartData
+    .map(d => d.value)
+    .filter((v): v is number => v !== null && Number.isFinite(v));
+  const hasValues = values.length > 0;
+  const min = hasValues ? Math.min(...values) : 0;
+  const max = hasValues ? Math.max(...values) : 0;
+  const avg = hasValues ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  const std = hasValues
+    ? Math.sqrt(values.reduce((sq, n) => sq + Math.pow(n - avg, 2), 0) / values.length)
+    : 0;
 
   // Derive Y-axis bounds from actual data so the chart auto-scales correctly.
   const dataRange = max - min || 1;
@@ -100,12 +109,15 @@ const EEGChart: React.FC<EEGChartProps> = ({
   const yDomainMin = Math.floor(min - yPad);
   const yDomainMax = Math.ceil(max + yPad);
 
-  // Get sleep stage statistics
+  // Get sleep stage statistics (skip clipped/null samples so a single spike
+  // can't poison the stage's avg/min/max readout).
   const stageStats = sleepStages.reduce((acc, stage) => {
     const stageData = data.filter(d => 
       d.timestamp >= stage.startTime && d.timestamp <= stage.endTime
     );
-    const stageValues = stageData.map(d => d.value);
+    const stageValues = stageData
+      .map(d => d.value)
+      .filter((v): v is number => v !== null && Number.isFinite(v));
     if (stageValues.length > 0) {
       acc[stage.type] = {
         avg: stageValues.reduce((a, b) => a + b, 0) / stageValues.length,
@@ -139,7 +151,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
             {elapsedLabel}
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.9em', color: 'var(--text-primary)' }}>
-            <strong>EEG Amplitude:</strong> {data.value.toFixed(2)} µV
+            <strong>EEG Amplitude:</strong> {data.value === null || !Number.isFinite(data.value) ? '— (clipped)' : `${data.value.toFixed(2)} µV`}
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.9em', color: 'var(--text-primary)' }}>
             <strong>Sleep Stage:</strong> {data.sleepStage || 'Unknown'}
@@ -279,6 +291,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
               fillOpacity={0.3}
               activeDot={{ r: 4 }}
               name="EEG Amplitude"
+              connectNulls
             />
           </AreaChart>
         ) : (
@@ -334,6 +347,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
               isAnimationActive={true}
               animationDuration={1000}
               animationEasing="ease-in-out"
+              connectNulls
             />
             
             {/* Moving average for better visualization */}
@@ -347,6 +361,7 @@ const EEGChart: React.FC<EEGChartProps> = ({
                 dot={false}
                 name="Smoothed"
                 isAnimationActive={false}
+                connectNulls
               />
             )}
           </LineChart>

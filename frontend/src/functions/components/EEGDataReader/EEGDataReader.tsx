@@ -54,6 +54,7 @@ import { useUpdates } from './hooks/useUpdates';
 
 // Types
 import { SleepStats } from './types';
+import { clipEEGForDisplay } from './utils/clipEEG';
 
 const EEGDataReader: React.FC = () => {
   // Scale-to-fit: keep entire UI visible at any window size or zoom
@@ -313,9 +314,12 @@ const EEGDataReader: React.FC = () => {
     }
     return indices.map((index) => {
       const timestamp = session.timestamps[index];
+      // Display-only clip: non-physiological samples become null so consumers
+      // can render gaps and skip them in stats. Raw samples on disk/in memory
+      // are untouched (sleep-stage computation still sees them as-is).
       return {
         timestamp,
-        value: session.channelData[index][selectedChannel],
+        value: clipEEGForDisplay(session.channelData[index][selectedChannel]),
         channel: selectedChannel,
         deviceId: session.deviceId,
         quality: session.quality,
